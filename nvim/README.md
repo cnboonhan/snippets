@@ -130,6 +130,7 @@ redefined: `K` hover, `grn` rename, `gra` code action, `grr` references,
 | `<leader>=` | LSP format |
 | `<leader>t` | toggle bottom terminal |
 | `<C-e>` | send line / selection to the terminal and run it |
+| `<C-S-e>` or `<leader>r` | send a `path:line` reference instead of the code |
 | `<C-h/j/k/l>` | move between windows, including out of the terminal |
 | `<Esc><Esc>` | terminal → normal mode |
 | `<leader>1` `2` `3` | merge: take hunk from LOCAL / BASE / REMOTE |

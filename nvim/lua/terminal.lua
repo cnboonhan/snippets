@@ -79,21 +79,52 @@ local function payload()
     return { vim.api.nvim_get_current_line() }
 end
 
-function M.send()
-    local lines = payload()
-
+-- Bring the terminal up if needed, then hand it raw bytes.
+local function deliver(text)
     if not visible() then
         open(true)
     end
     if not alive() then
-        return vim.notify("terminal shell is not running", vim.log.levels.WARN)
+        vim.notify("terminal shell is not running", vim.log.levels.WARN)
+        return
+    end
+    vim.fn.chansend(vim.bo[state.buf].channel, text)
+    vim.schedule(follow) -- output arrives async
+end
+
+function M.send()
+    -- The trailing newline is what makes the shell execute the last line.
+    deliver(table.concat(payload(), "\n") .. "\n")
+end
+
+-- The same gesture, but sending a `path:line` reference instead of the code,
+-- so an agent running in the terminal can look at exactly what you are
+-- looking at. Deliberately no trailing newline: the reference lands in the
+-- prompt for you to type around instead of being submitted on its own.
+function M.send_ref()
+    if vim.bo.buftype ~= "" then
+        return vim.notify("not a file buffer", vim.log.levels.WARN)
+    end
+    local path = vim.fn.expand("%:.") -- relative to cwd, which agents prefer
+    if path == "" then
+        return vim.notify("buffer has no file name", vim.log.levels.WARN)
     end
 
-    -- A trailing newline is what makes the shell execute each line.
-    for _, line in ipairs(lines) do
-        vim.fn.chansend(vim.bo[state.buf].channel, line .. "\n")
+    local mode = vim.fn.mode()
+    local ref
+    if mode == "v" or mode == "V" or mode == "\22" then
+        local first, last = vim.fn.getpos("v")[2], vim.fn.getpos(".")[2]
+        if first > last then
+            first, last = last, first
+        end
+        vim.api.nvim_feedkeys(vim.keycode("<Esc>"), "nx", false)
+        ref = first == last and ("%s:%d"):format(path, first)
+            or ("%s:%d-%d"):format(path, first, last)
+    else
+        ref = ("%s:%d"):format(path, vim.api.nvim_win_get_cursor(0)[1])
     end
-    vim.schedule(follow) -- output arrives async
+
+    deliver(ref .. " ")
 end
 
 return M

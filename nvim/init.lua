@@ -225,6 +225,13 @@ map("n", "<leader>t", term.toggle, { desc = "Toggle bottom terminal" })
 -- <C-e>'s only built-in job is scrolling down one line.
 map({ "n", "x" }, "<C-e>", term.send, { desc = "Send line/selection to terminal" })
 
+-- Same gesture, but sends a `path:line` reference rather than the code, so an
+-- agent in the terminal can look at what you are looking at. Ctrl+Shift+E is
+-- only distinguishable from Ctrl+E under the kitty keyboard protocol, which
+-- Ghostty speaks; <leader>r is the fallback on terminals that do not.
+map({ "n", "x" }, "<C-S-e>",   term.send_ref, { desc = "Send path:line reference to terminal" })
+map({ "n", "x" }, "<leader>r", term.send_ref, { desc = "Send path:line reference to terminal" })
+
 -- Window navigation straight out of terminal mode, so leaving the terminal
 -- never needs <Esc><Esc> first. This shadows four readline keys *inside the
 -- terminal only*: C-h backward-delete-char, C-j accept-line, C-k kill-line,
