@@ -153,10 +153,12 @@ and are deliberately not redefined.
 | `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
 | `<leader>q` | toggle netrw file explorer (`:Explore` / `:Rexplore`) |
 | `<leader>d` | diagnostics to loclist |
-| `<leader>n` | new tab |
 | `gt` `gT` | next / previous tab (built-in); `2gt` jumps to tab 2 |
 | `<leader>=` | LSP format |
-| `<leader>t` / `<leader>T` | toggle the side / bottom terminal (separate shells) |
+| `<leader>t` / `<leader>T` | toggle the side / bottom terminal panel |
+| `<leader>n` | another shell when in a terminal, otherwise a new tab |
+| `gt` `gT` `2gt` | inside a terminal: next / previous / Nth shell |
+| `<leader>]` / `<leader>[` | next / previous shell in that panel |
 | `<leader>e` / `<leader>E` | send line or selection to the side / bottom terminal |
 | `<leader>r` / `<leader>R` | send a `path:line` reference to the side / bottom terminal |
 | `<leader>i` | view the current file as an image |
@@ -164,9 +166,13 @@ and are deliberately not redefined.
 | `<C-x>` | hide the window; on the tab's last window, close the tab. Buffers stay loaded, shells keep running |
 | `<Esc><Esc>` | terminal → normal mode |
 
-Two independent terminals, each with its own shell: one down the side, one
-along the bottom. Leave a REPL or an activated venv in one and run commands in
-the other. Lower case targets the side, upper case the bottom, throughout.
+Two terminal panels -- one down the side, one along the bottom -- and each
+holds as many shells as you like, cycled like tabs within the panel. A row of
+numbers appears along the top of a panel once it has more than one, and they
+are clickable. `gt` / `gT` / `2gt` select shells inside a terminal, mirroring
+how they move between tabpages everywhere else. Leave a
+REPL in one shell and run commands in another. Lower case targets the side
+panel, upper case the bottom, throughout.
 
 Every tab gets its own pair, so a tab is a self-contained workspace. They are
 separate processes, but every new shell sources the project's `.venv`/`venv`

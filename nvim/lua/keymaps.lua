@@ -92,6 +92,15 @@ map("n", "<leader>d", vim.diagnostic.setloclist, { desc = "Diagnostics to loclis
 -- them and {count}gt jumps straight to one (2gt = second tab). <leader>1..3
 -- would be the obvious jump keys but they are the mergetool diffget keys.
 -- 'showtabline' is 1 by default, so the tabline appears once a second tab does.
-map("n", "<leader>n", "<cmd>tabnew<CR>", { desc = "New tab" })
+-- One "new" key: another shell when you are in a terminal panel, otherwise a
+-- new tab. Inside a terminal, gt / gT / 2gt select shells the same way they
+-- select tabpages elsewhere.
+map("n", "<leader>n", function()
+    if vim.bo.buftype == "terminal" then
+        require("terminal").new()
+    else
+        vim.cmd("tabnew")
+    end
+end, { desc = "New shell (in a terminal) or new tab" })
 -- No close-tab key: <C-x> already closes the tab once it is the last window.
 -- <leader>f / g / b / h are fuzzy pickers, set up in the Plugins section.
