@@ -74,7 +74,51 @@ map("n", "<C-l>", "<C-w>l", { desc = "Window right" })
 -- Get out of a :terminal buffer
 map("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Terminal: normal mode" })
 
-map("n", "<leader>q", "<cmd>Explore<CR>",        { desc = "File explorer (netrw)" })
+-- Toggle. Leaving is the fiddly half: :Rexplore ("return to the file I came
+-- from") throws when nvim was started on a directory, and can also succeed
+-- while landing on another directory buffer -- which is just netrw again. So
+-- check that we actually left, and keep falling back until we have.
+local function in_explorer()
+    local name = vim.api.nvim_buf_get_name(0)
+    return vim.bo.filetype == "netrw" or (name ~= "" and vim.fn.isdirectory(name) == 1)
+end
+
+map("n", "<leader>q", function()
+    if not in_explorer() then
+        vim.cmd("Explore")
+        return
+    end
+
+    pcall(vim.cmd, "Rexplore")
+    if not in_explorer() then
+        return
+    end
+
+    -- A candidate has to be a real file: not netrw, not a directory buffer,
+    -- and actually named.
+    local function is_file(b)
+        local name = vim.api.nvim_buf_get_name(b)
+        return vim.api.nvim_buf_is_valid(b)
+            and vim.bo[b].filetype ~= "netrw"
+            and name ~= ""
+            and vim.fn.isdirectory(name) == 0
+    end
+
+    local alt = vim.fn.bufnr("#")
+    if alt > 0 and is_file(alt) then
+        vim.api.nvim_set_current_buf(alt)
+        return
+    end
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.bo[b].buflisted and is_file(b) then
+            vim.api.nvim_set_current_buf(b)
+            return
+        end
+    end
+
+    -- Nothing to go back to, but leaving is what was asked for.
+    vim.cmd("enew")
+end, { desc = "Toggle file explorer (netrw)" })
 map("n", "<leader>d", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
 -- <leader>f / g / b / h are fuzzy pickers, set up in the Plugins section.
 

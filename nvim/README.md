@@ -145,14 +145,13 @@ infocmp -x xterm-ghostty | ssh myserver -- tic -x -
 
 ## Keys
 
-Leader is `Space`. LSP keys are nvim 0.11 defaults and are deliberately not
-redefined: `K` hover, `grn` rename, `gra` code action, `grr` references,
-`gO` symbols, `]d` / `[d` diagnostics.
+Leader is `Space`. The LSP and navigation keys below are nvim's own defaults
+and are deliberately not redefined.
 
 | Key | Action |
 | --- | --- |
 | `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
-| `<leader>q` | netrw file explorer |
+| `<leader>q` | toggle netrw file explorer (`:Explore` / `:Rexplore`) |
 | `<leader>d` | diagnostics to loclist |
 | `<leader>=` | LSP format |
 | `<leader>t` | toggle bottom terminal |
@@ -165,6 +164,31 @@ redefined: `K` hover, `grn` rename, `gra` code action, `grr` references,
 | `]h` `[h` | jump to next / previous git hunk |
 | `gh` | git hunk text object (`dgh` reset, `ghgh` select) |
 | `<leader>o` | toggle the inline git diff overlay |
+
+### LSP and code navigation
+
+Go-to-definition is the built-in tag jump: on LSP attach nvim sets
+`tagfunc=v:lua.vim.lsp.tagfunc`, so the tag keys ask the language server.
+
+| Key | Action |
+| --- | --- |
+| `<C-]>` | go to definition |
+| `<C-t>` | jump back (tag stack; repeat to unwind) |
+| `<C-w>]` | definition in a horizontal split |
+| `<C-w>}` | definition in a preview window |
+| `g<C-]>` | `:tjump` — pick from a list when several match |
+| `grr` `gri` `grt` | references / implementation / type definition |
+| `grn` `gra` | rename / code action |
+| `gO` | document symbols |
+| `K` | hover |
+| `]d` `[d` | next / previous diagnostic |
+| `<leader>d` | diagnostics to the location list |
+| `<leader>=` | format via the language server |
+
+Trap: `gd` and `gD` are **not** LSP here. They are unmapped, so they fall back
+to vim's original textual search for a declaration in the current file. Most
+distro configs rebind `gd` to `vim.lsp.buf.definition()`, so muscle memory
+misleads: `gd` often appears to work while silently only matching text.
 
 ## Layout
 
