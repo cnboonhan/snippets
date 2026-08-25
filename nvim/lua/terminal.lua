@@ -1,65 +1,107 @@
--- One reusable bottom-split terminal, plus send-line/selection-to-it.
--- Uses only built-in APIs: :terminal, chansend(), getregion().
+-- Two independent terminals: one down the side, one along the bottom. Each
+-- keeps its own shell, so a REPL can sit in one while you run commands in the
+-- other. Built on :terminal and chansend(); nothing else needed.
 local M = {}
 
 local HEIGHT = 15
 local WIDTH = 80
--- `vertical` remembers the last placement, so send() reopens where you left it.
-local state = { buf = nil, win = nil, vertical = false }
 
--- A terminal buffer keeps its job channel in 'channel'; it drops to 0 once
--- the shell exits, which is how we tell a dead terminal from a live one.
-local function alive()
-    return state.buf
-        and vim.api.nvim_buf_is_valid(state.buf)
-        and vim.bo[state.buf].channel ~= 0
+-- Each tabpage gets its own pair, so a tab is a self-contained workspace with
+-- its own two shells rather than sharing them with every other tab.
+local per_tab = {}
+
+local function slot(name)
+    local tab = vim.api.nvim_get_current_tabpage()
+    per_tab[tab] = per_tab[tab] or {
+        right = { vertical = true },
+        bottom = { vertical = false },
+    }
+    return per_tab[tab][name] or per_tab[tab].right
 end
 
-local function visible()
-    return state.win
-        and vim.api.nvim_win_is_valid(state.win)
-        and vim.api.nvim_win_get_buf(state.win) == state.buf
+-- A closed tab's shells would otherwise linger as hidden buffers with live
+-- processes, so reap them along with the tab.
+local function reap_closed_tabs()
+    for tab, pair in pairs(per_tab) do
+        if not vim.api.nvim_tabpage_is_valid(tab) then
+            for _, one in pairs(pair) do
+                if one.buf and vim.api.nvim_buf_is_valid(one.buf) then
+                    pcall(vim.api.nvim_buf_delete, one.buf, { force = true })
+                end
+            end
+            per_tab[tab] = nil
+        end
+    end
+end
+
+-- A terminal buffer keeps its job channel in 'channel'; it drops to 0 once the
+-- shell exits, which is how we tell a dead terminal from a live one.
+local function alive(s)
+    return s.buf and vim.api.nvim_buf_is_valid(s.buf) and vim.bo[s.buf].channel ~= 0
+end
+
+-- Visible in this tab. The tabpage check is belt and braces now that state is
+-- per tab, but a stale window id from a closed tab would otherwise look valid.
+local function visible(s)
+    return s.win
+        and vim.api.nvim_win_is_valid(s.win)
+        and vim.api.nvim_win_get_tabpage(s.win) == vim.api.nvim_get_current_tabpage()
+        and vim.api.nvim_win_get_buf(s.win) == s.buf
 end
 
 -- Park the cursor on the last line: terminal buffers only follow new output
 -- while the cursor sits at the bottom.
-local function follow()
-    if visible() then
-        local last = vim.api.nvim_buf_line_count(state.buf)
-        pcall(vim.api.nvim_win_set_cursor, state.win, { last, 0 })
+local function follow(s)
+    if visible(s) then
+        pcall(vim.api.nvim_win_set_cursor, s.win, { vim.api.nvim_buf_line_count(s.buf), 0 })
     end
 end
 
--- Show the terminal, creating it on first use or after the shell exited.
--- With keep_focus, the cursor stays in the window you came from. `vertical`
--- defaults to the last placement used.
-local function open(keep_focus, vertical)
+-- Move out of a terminal window, if we are in one, so a new split lands
+-- beside the code rather than nested inside another terminal.
+local function focus_editor()
+    if vim.bo.buftype ~= "terminal" then
+        return
+    end
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.bo[vim.api.nvim_win_get_buf(w)].buftype ~= "terminal" then
+            vim.api.nvim_set_current_win(w)
+            return
+        end
+    end
+end
+
+-- Show this slot, creating its shell on first use or after the old one exited.
+-- With keep_focus, the cursor stays in the window you came from.
+local function open(s, keep_focus)
     local prev = vim.api.nvim_get_current_win()
 
-    if vertical == nil then
-        vertical = state.vertical
-    end
-    if vertical then
-        -- Never wider than half the screen, however wide WIDTH is.
+    if s.vertical then
+        -- botright: full height down the right edge. Never wider than half the
+        -- screen, however wide WIDTH is.
         vim.cmd(("botright %dvsplit"):format(math.min(WIDTH, math.floor(vim.o.columns / 2))))
     else
-        vim.cmd(("botright %dsplit"):format(HEIGHT))
+        -- belowright, not botright: this splits the *current* window's space,
+        -- so a side terminal keeps its full height instead of being squashed
+        -- by a bottom split spanning the whole screen. Start from an editor
+        -- window so the terminal lands under the code, not inside a terminal.
+        focus_editor()
+        vim.cmd(("belowright %dsplit"):format(HEIGHT))
     end
-    state.vertical = vertical
-    state.win = vim.api.nvim_get_current_win()
+    s.win = vim.api.nvim_get_current_win()
 
-    if alive() then
-        vim.api.nvim_win_set_buf(state.win, state.buf)
+    if alive(s) then
+        vim.api.nvim_win_set_buf(s.win, s.buf)
     else
         vim.cmd("terminal")
-        state.buf = vim.api.nvim_get_current_buf()
-        vim.bo[state.buf].buflisted = false
+        s.buf = vim.api.nvim_get_current_buf()
+        vim.bo[s.buf].buflisted = false
     end
 
-    vim.wo[state.win].number = false
-    vim.wo[state.win].relativenumber = false
-    vim.wo[state.win].signcolumn = "no"
-    follow()
+    vim.wo[s.win].number = false
+    vim.wo[s.win].relativenumber = false
+    vim.wo[s.win].signcolumn = "no"
+    follow(s)
 
     if keep_focus then
         vim.api.nvim_set_current_win(prev)
@@ -70,23 +112,33 @@ local function open(keep_focus, vertical)
     end
 end
 
--- Toggling with the placement it already has hides it; toggling with the other
--- placement moves it there, reusing the same shell.
-function M.toggle(vertical)
-    vertical = vertical or false
-    if visible() then
-        local same = state.vertical == vertical
-        vim.api.nvim_win_close(state.win, false) -- hide; the shell keeps running
-        state.win = nil
-        if same then
-            return
-        end
+-- Each placement toggles its own shell, independently of the other.
+function M.toggle(name)
+    local s = slot(name)
+    if visible(s) then
+        vim.api.nvim_win_close(s.win, false) -- hide; the shell keeps running
+        s.win = nil
+        return
     end
-    open(false, vertical)
+    open(s, false)
 end
 
--- The visual selection, or the current line when not in visual mode.
--- Must run before any window juggling, which would drop visual mode.
+-- Bring the named shell up if needed, then hand it raw bytes.
+local function deliver(name, text)
+    local s = slot(name)
+    if not visible(s) then
+        open(s, true)
+    end
+    if not alive(s) then
+        vim.notify("terminal shell is not running", vim.log.levels.WARN)
+        return
+    end
+    vim.fn.chansend(vim.bo[s.buf].channel, text)
+    vim.schedule(function() follow(s) end)
+end
+
+-- The visual selection, or the current line when not in visual mode. Must run
+-- before any window juggling, which would drop visual mode.
 local function payload()
     local mode = vim.fn.mode()
     if mode == "v" or mode == "V" or mode == "\22" then
@@ -97,29 +149,16 @@ local function payload()
     return { vim.api.nvim_get_current_line() }
 end
 
--- Bring the terminal up if needed, then hand it raw bytes.
-local function deliver(text)
-    if not visible() then
-        open(true)
-    end
-    if not alive() then
-        vim.notify("terminal shell is not running", vim.log.levels.WARN)
-        return
-    end
-    vim.fn.chansend(vim.bo[state.buf].channel, text)
-    vim.schedule(follow) -- output arrives async
-end
-
-function M.send()
+function M.send(name)
     -- The trailing newline is what makes the shell execute the last line.
-    deliver(table.concat(payload(), "\n") .. "\n")
+    deliver(name, table.concat(payload(), "\n") .. "\n")
 end
 
 -- The same gesture, but sending a `path:line` reference instead of the code,
--- so an agent running in the terminal can look at exactly what you are
--- looking at. Deliberately no trailing newline: the reference lands in the
--- prompt for you to type around instead of being submitted on its own.
-function M.send_ref()
+-- so an agent running in the terminal can look at exactly what you are looking
+-- at. Deliberately no trailing newline: the reference lands in the prompt for
+-- you to type around instead of being submitted on its own.
+function M.send_ref(name)
     if vim.bo.buftype ~= "" then
         return vim.notify("not a file buffer", vim.log.levels.WARN)
     end
@@ -131,18 +170,18 @@ function M.send_ref()
     local mode = vim.fn.mode()
     local ref
     if mode == "v" or mode == "V" or mode == "\22" then
-        local first, last = vim.fn.getpos("v")[2], vim.fn.getpos(".")[2]
-        if first > last then
-            first, last = last, first
+        local first, last_line = vim.fn.getpos("v")[2], vim.fn.getpos(".")[2]
+        if first > last_line then
+            first, last_line = last_line, first
         end
         vim.api.nvim_feedkeys(vim.keycode("<Esc>"), "nx", false)
-        ref = first == last and ("%s:%d"):format(path, first)
-            or ("%s:%d-%d"):format(path, first, last)
+        ref = first == last_line and ("%s:%d"):format(path, first)
+            or ("%s:%d-%d"):format(path, first, last_line)
     else
         ref = ("%s:%d"):format(path, vim.api.nvim_win_get_cursor(0)[1])
     end
 
-    deliver(ref .. " ")
+    deliver(name, ref .. " ")
 end
 
 -- Keymaps and autocommands for the above. Called from init.lua so that this
@@ -151,16 +190,22 @@ function M.setup()
     local map = vim.keymap.set
     local aug = vim.api.nvim_create_augroup("user.terminal", { clear = true })
 
+    map("n", "<leader>t", function() M.toggle("right") end,  { desc = "Toggle side terminal" })
+    map("n", "<leader>T", function() M.toggle("bottom") end, { desc = "Toggle bottom terminal" })
 
-    map("n", "<leader>t", function() M.toggle(true) end,  { desc = "Toggle terminal (right split)" })
-    map("n", "<leader>T", function() M.toggle(false) end, { desc = "Toggle terminal (bottom split)" })
+    -- Lower case targets the side terminal, upper case the bottom one, the
+    -- same shift convention as <leader>t / <leader>T.
+    map({ "n", "x" }, "<leader>e", function() M.send("right") end,
+        { desc = "Send line/selection to side terminal" })
+    map({ "n", "x" }, "<leader>E", function() M.send("bottom") end,
+        { desc = "Send line/selection to bottom terminal" })
 
-    -- Send the current line, or the visual selection, and run it.
-    map({ "n", "x" }, "<leader>e", M.send, { desc = "Send line/selection to terminal" })
-
-    -- Same gesture, but sends a `path:line` reference rather than the code, so an
-    -- agent in the terminal can look at what you are looking at.
-    map({ "n", "x" }, "<leader>r", M.send_ref, { desc = "Send path:line reference to terminal" })
+    -- Same gesture, but sending a `path:line` reference rather than the code,
+    -- so an agent in the terminal can look at what you are looking at.
+    map({ "n", "x" }, "<leader>r", function() M.send_ref("right") end,
+        { desc = "Send path:line reference to side terminal" })
+    map({ "n", "x" }, "<leader>R", function() M.send_ref("bottom") end,
+        { desc = "Send path:line reference to bottom terminal" })
 
     -- Window navigation straight out of terminal mode, so leaving the terminal
     -- never needs <Esc><Esc> first. This shadows four readline keys *inside the
@@ -184,8 +229,13 @@ function M.setup()
         end,
     })
 
-    -- To hide the terminal from inside it, use <C-x> like any other window.
-    
+    vim.api.nvim_create_autocmd("TabClosed", {
+        group = aug,
+        desc = "Kill the terminals belonging to a closed tab",
+        callback = reap_closed_tabs,
+    })
+
+    -- To hide either terminal from inside it, use <C-x> like any other window.
 end
 
 return M

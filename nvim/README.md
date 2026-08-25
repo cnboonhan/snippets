@@ -156,20 +156,27 @@ and are deliberately not redefined.
 | `<leader>n` | new tab |
 | `gt` `gT` | next / previous tab (built-in); `2gt` jumps to tab 2 |
 | `<leader>=` | LSP format |
-| `<leader>t` | toggle terminal in a right split |
-| `<leader>T` | toggle terminal in a bottom split (same shell) |
-| `<leader>e` | send line / selection to the terminal and run it |
-| `<leader>r` | send a `path:line` reference instead of the code |
+| `<leader>t` / `<leader>T` | toggle the side / bottom terminal (separate shells) |
+| `<leader>e` / `<leader>E` | send line or selection to the side / bottom terminal |
+| `<leader>r` / `<leader>R` | send a `path:line` reference to the side / bottom terminal |
 | `<leader>i` | view the current file as an image |
 | `<C-h/j/k/l>` | move between windows, including out of the terminal |
 | `<C-x>` | hide the window; on the tab's last window, close the tab. Buffers stay loaded, shells keep running |
 | `<Esc><Esc>` | terminal → normal mode |
 
-The two terminal keys are placements for one shell, not two terminals:
-pressing the other one moves it and keeps your history and running
-process. A leader key cannot work in terminal mode -- mapping `<Space>` there would
-hijack every "space then t" you type at the shell -- so `<C-x>` hides it from
-inside, the same key that hides any other window.
+Two independent terminals, each with its own shell: one down the side, one
+along the bottom. Leave a REPL or an activated venv in one and run commands in
+the other. Lower case targets the side, upper case the bottom, throughout.
+
+Every tab gets its own pair, so a tab is a self-contained workspace: a venv
+activated in one tab's side terminal is not the same shell as another tab's.
+Closing a tab reaps its two shells rather than leaving them running as hidden
+buffers. The bottom terminal splits the *current* window rather than the whole
+screen, so a side terminal keeps its full height instead of being squashed.
+
+A leader key cannot work in terminal mode -- mapping `<Space>` there would
+hijack every "space then t" you type at the shell -- so `<C-x>` hides either
+one from inside, the same key that hides any other window.
 
 | `<leader>1` `2` `3` | merge: take hunk from LOCAL / BASE / REMOTE |
 | `<leader>u` | merge: refresh the diff |
@@ -216,6 +223,7 @@ lua/lsp.lua           diagnostics, completion, per-buffer LSP setup
 lua/plugins.lua       vim.pack and the three plugins, with their keys
 lua/diffs.lua         diff colours and the mergetool keys
 lua/images.lua        image viewing
+lua/session.lua       per-directory window/tab layout
 lua/terminal.lua      the terminal, send-to-terminal, and its keys
 lua/prereq/           external tool checks (:checkhealth prereq)
 lsp/*.lua             one table per language server
@@ -224,6 +232,11 @@ nvim-pack-lock.json   pinned plugin revisions
 
 ## Notes
 
+- State that survives closing nvim: undo history ('undofile'), marks,
+  registers and search/command history (shada), and the window/tab layout per
+  directory. Bare `nvim` in a directory restores its layout; `nvim foo.py` just
+  opens that file. `:SessionRestore` restores on demand. Headless runs neither
+  save nor restore, so scripts cannot clobber a layout.
 - Update plugins: `:lua vim.pack.update()`, review the diff, `:w` to apply.
 - Add a parser: `:lua require("nvim-treesitter").install({"go"})`.
 - Buffers reload the instant a file changes on disk -- a git checkout, a
