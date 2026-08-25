@@ -153,6 +153,8 @@ and are deliberately not redefined.
 | `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
 | `<leader>q` | toggle netrw file explorer (`:Explore` / `:Rexplore`) |
 | `<leader>d` | diagnostics to loclist |
+| `<leader>n` | new tab |
+| `gt` `gT` | next / previous tab (built-in); `2gt` jumps to tab 2 |
 | `<leader>=` | LSP format |
 | `<leader>t` | toggle terminal in a right split |
 | `<leader>T` | toggle terminal in a bottom split (same shell) |
@@ -160,7 +162,7 @@ and are deliberately not redefined.
 | `<leader>r` | send a `path:line` reference instead of the code |
 | `<leader>i` | view the current file as an image |
 | `<C-h/j/k/l>` | move between windows, including out of the terminal |
-| `<C-x>` | hide the current window — buffer stays loaded, shells keep running |
+| `<C-x>` | hide the window; on the tab's last window, close the tab. Buffers stay loaded, shells keep running |
 | `<Esc><Esc>` | terminal → normal mode |
 
 The two terminal keys are placements for one shell, not two terminals:

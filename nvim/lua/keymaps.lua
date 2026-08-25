@@ -16,14 +16,20 @@ map("n", "<C-k>", "<C-w>k", { desc = "Window up" })
 map("n", "<C-l>", "<C-w>l", { desc = "Window right" })
 
 -- Hide the current window, keeping its buffer loaded -- and for the terminal,
--- its shell running. <C-q> would read better ("quit") but terminals can eat it
--- as XOFF flow control, which fails silently; <C-x> always arrives and costs
--- only decrement-number.
+-- its shell running. Escalates rather than refusing: when this is the tab's
+-- last window there is nothing left to show, so close the tab instead. Stops
+-- at the last window of the last tab so it can never quit nvim by surprise.
+-- <C-q> would read better ("quit") but terminals can eat it as XOFF flow
+-- control, which fails silently; <C-x> always arrives and costs only
+-- decrement-number.
 local function hide_window()
-    if #vim.api.nvim_tabpage_list_wins(0) < 2 then
-        return vim.notify("only one window", vim.log.levels.INFO)
+    if #vim.api.nvim_tabpage_list_wins(0) > 1 then
+        vim.cmd("hide")
+    elseif #vim.api.nvim_list_tabpages() > 1 then
+        vim.cmd("tabclose")
+    else
+        vim.notify("last window of the last tab", vim.log.levels.INFO)
     end
-    vim.cmd("hide")
 end
 
 map("n", "<C-x>", hide_window, { desc = "Hide current window" })
@@ -81,4 +87,11 @@ map("n", "<leader>q", function()
     vim.cmd("enew")
 end, { desc = "Toggle file explorer (netrw)" })
 map("n", "<leader>d", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
+
+-- Tabs. Switching is already built in and not redefined: gt / gT step through
+-- them and {count}gt jumps straight to one (2gt = second tab). <leader>1..3
+-- would be the obvious jump keys but they are the mergetool diffget keys.
+-- 'showtabline' is 1 by default, so the tabline appears once a second tab does.
+map("n", "<leader>n", "<cmd>tabnew<CR>", { desc = "New tab" })
+-- No close-tab key: <C-x> already closes the tab once it is the last window.
 -- <leader>f / g / b / h are fuzzy pickers, set up in the Plugins section.
