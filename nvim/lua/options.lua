@@ -47,8 +47,9 @@ o.splitbelow = true
 vim.g.clipboard = "osc52"
 o.clipboard = "unnamedplus"
 
--- Completion menu: show even for a single match, never auto-insert.
-o.completeopt = "menu,menuone,popup,noinsert,fuzzy"
+-- Completion menu: show even for a single match, and preselect nothing, so
+-- <CR> stays a newline instead of accepting whatever was highlighted.
+o.completeopt = "menu,menuone,popup,noselect,fuzzy"
 
 -- Use ripgrep for :grep
 o.grepprg = "rg --vimgrep --smart-case"

@@ -168,8 +168,10 @@ Two independent terminals, each with its own shell: one down the side, one
 along the bottom. Leave a REPL or an activated venv in one and run commands in
 the other. Lower case targets the side, upper case the bottom, throughout.
 
-Every tab gets its own pair, so a tab is a self-contained workspace: a venv
-activated in one tab's side terminal is not the same shell as another tab's.
+Every tab gets its own pair, so a tab is a self-contained workspace. They are
+separate processes, but every new shell sources the project's `.venv`/`venv`
+activate script if it finds one searching upward from the file you were on, so
+they all start in the same environment.
 Closing a tab reaps its two shells rather than leaving them running as hidden
 buffers. The bottom terminal splits the *current* window rather than the whole
 screen, so a side terminal keeps its full height instead of being squashed.
@@ -237,6 +239,12 @@ nvim-pack-lock.json   pinned plugin revisions
   directory. Bare `nvim` in a directory restores its layout; `nvim foo.py` just
   opens that file. `:SessionRestore` restores on demand. Headless runs neither
   save nor restore, so scripts cannot clobber a layout.
+- Completion is nvim's built-in LSP completion. `autotrigger` alone only fires
+  on the server's trigger characters -- for basedpyright `.` `[` `"` `'` -- so
+  it covers `foo.` but never a bare identifier. A `TextChangedI` autocommand
+  asks for completion once two word characters have been typed, which is what
+  makes variables complete. `<C-Space>` triggers it by hand, `<C-x><C-o>` also
+  works. 'completeopt' uses `noselect` so `<CR>` stays a newline.
 - Update plugins: `:lua vim.pack.update()`, review the diff, `:w` to apply.
 - Add a parser: `:lua require("nvim-treesitter").install({"go"})`.
 - Buffers reload the instant a file changes on disk -- a git checkout, a

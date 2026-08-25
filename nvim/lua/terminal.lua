@@ -57,6 +57,24 @@ local function follow(s)
     end
 end
 
+-- The project's Python venv, if there is one, searching upward from the file
+-- you were looking at. Sourcing the real activate script rather than poking
+-- PATH keeps the prompt and `deactivate` working normally.
+local function venv_activate(from_buf)
+    local name = vim.api.nvim_buf_get_name(from_buf)
+    local from = name ~= "" and vim.fn.fnamemodify(name, ":p:h") or vim.fn.getcwd()
+    if vim.fn.isdirectory(from) == 0 then
+        from = vim.fn.getcwd()
+    end
+    local dir = vim.fs.find({ ".venv", "venv" },
+        { upward = true, type = "directory", path = from })[1]
+    if not dir then
+        return nil
+    end
+    local script = dir .. "/bin/activate"
+    return vim.fn.filereadable(script) == 1 and script or nil
+end
+
 -- Move out of a terminal window, if we are in one, so a new split lands
 -- beside the code rather than nested inside another terminal.
 local function focus_editor()
@@ -75,6 +93,8 @@ end
 -- With keep_focus, the cursor stays in the window you came from.
 local function open(s, keep_focus)
     local prev = vim.api.nvim_get_current_win()
+    -- Work this out now: once :terminal runs, the current buffer is term://...
+    local activate = venv_activate(vim.api.nvim_get_current_buf())
 
     if s.vertical then
         -- botright: full height down the right edge. Never wider than half the
@@ -96,6 +116,13 @@ local function open(s, keep_focus)
         vim.cmd("terminal")
         s.buf = vim.api.nvim_get_current_buf()
         vim.bo[s.buf].buflisted = false
+        -- Every new shell gets the same project environment, so the two
+        -- terminals (and every tab's pair) agree despite being separate
+        -- processes.
+        if activate then
+            vim.fn.chansend(vim.bo[s.buf].channel,
+                ("source %s\n"):format(vim.fn.shellescape(activate)))
+        end
     end
 
     vim.wo[s.win].number = false
