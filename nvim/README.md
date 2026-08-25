@@ -157,6 +157,7 @@ and are deliberately not redefined.
 | `<leader>t` | toggle bottom terminal |
 | `<leader>e` | send line / selection to the terminal and run it |
 | `<leader>r` | send a `path:line` reference instead of the code |
+| `<leader>i` | view the current file as an image |
 | `<C-h/j/k/l>` | move between windows, including out of the terminal |
 | `<Esc><Esc>` | terminal → normal mode |
 | `<leader>1` `2` `3` | merge: take hunk from LOCAL / BASE / REMOTE |
@@ -211,5 +212,11 @@ nvim-pack-lock.json   pinned plugin revisions
   atomic writers replace the inode, and a watch on the file itself would then
   be pointing at a dead one. Unsaved edits are never lost: nvim warns with
   `W12` and keeps your version.
-- Images cannot render inside nvim: `:terminal` swallows the kitty graphics
-  protocol and `:!` re-renders escapes as text. Run `timg` in a real shell.
+- Opening an image picks a viewer by what the machine can do: on a desktop it
+  hands off to the OS viewer (`open` / `xdg-open`) for real zoom and pan; on a
+  headless box over SSH it draws in the terminal with `timg`, whose kitty
+  escapes travel back down the connection (view only, no zoom). Either way the
+  bytes never enter a buffer. `<leader>i` views again.
+  nvim cannot do this itself: `:terminal` swallows the graphics protocol and
+  `:!` is handed a pipe, so nvim re-renders the escapes as literal text. The
+  terminal path writes bytes straight at the terminal via `nvim_chan_send`.
