@@ -3,7 +3,9 @@
 local M = {}
 
 local HEIGHT = 15
-local state = { buf = nil, win = nil }
+local WIDTH = 80
+-- `vertical` remembers the last placement, so send() reopens where you left it.
+local state = { buf = nil, win = nil, vertical = false }
 
 -- A terminal buffer keeps its job channel in 'channel'; it drops to 0 once
 -- the shell exits, which is how we tell a dead terminal from a live one.
@@ -29,11 +31,21 @@ local function follow()
 end
 
 -- Show the terminal, creating it on first use or after the shell exited.
--- With keep_focus, the cursor stays in the window you came from.
-local function open(keep_focus)
+-- With keep_focus, the cursor stays in the window you came from. `vertical`
+-- defaults to the last placement used.
+local function open(keep_focus, vertical)
     local prev = vim.api.nvim_get_current_win()
 
-    vim.cmd("botright " .. HEIGHT .. "split")
+    if vertical == nil then
+        vertical = state.vertical
+    end
+    if vertical then
+        -- Never wider than half the screen, however wide WIDTH is.
+        vim.cmd(("botright %dvsplit"):format(math.min(WIDTH, math.floor(vim.o.columns / 2))))
+    else
+        vim.cmd(("botright %dsplit"):format(HEIGHT))
+    end
+    state.vertical = vertical
     state.win = vim.api.nvim_get_current_win()
 
     if alive() then
@@ -58,13 +70,19 @@ local function open(keep_focus)
     end
 end
 
-function M.toggle()
+-- Toggling with the placement it already has hides it; toggling with the other
+-- placement moves it there, reusing the same shell.
+function M.toggle(vertical)
+    vertical = vertical or false
     if visible() then
+        local same = state.vertical == vertical
         vim.api.nvim_win_close(state.win, false) -- hide; the shell keeps running
         state.win = nil
-    else
-        open(false)
+        if same then
+            return
+        end
     end
+    open(false, vertical)
 end
 
 -- The visual selection, or the current line when not in visual mode.
@@ -125,6 +143,49 @@ function M.send_ref()
     end
 
     deliver(ref .. " ")
+end
+
+-- Keymaps and autocommands for the above. Called from init.lua so that this
+-- file owns its own bindings rather than scattering them.
+function M.setup()
+    local map = vim.keymap.set
+    local aug = vim.api.nvim_create_augroup("user.terminal", { clear = true })
+
+
+    map("n", "<leader>t", function() M.toggle(true) end,  { desc = "Toggle terminal (right split)" })
+    map("n", "<leader>T", function() M.toggle(false) end, { desc = "Toggle terminal (bottom split)" })
+
+    -- Send the current line, or the visual selection, and run it.
+    map({ "n", "x" }, "<leader>e", M.send, { desc = "Send line/selection to terminal" })
+
+    -- Same gesture, but sends a `path:line` reference rather than the code, so an
+    -- agent in the terminal can look at what you are looking at.
+    map({ "n", "x" }, "<leader>r", M.send_ref, { desc = "Send path:line reference to terminal" })
+
+    -- Window navigation straight out of terminal mode, so leaving the terminal
+    -- never needs <Esc><Esc> first. This shadows four readline keys *inside the
+    -- terminal only*: C-h backward-delete-char, C-j accept-line, C-k kill-line,
+    -- C-l clear-screen. Drop a line here to hand any of them back to the shell.
+    for _, dir in ipairs({ "h", "j", "k", "l" }) do
+        map("t", "<C-" .. dir .. ">", "<C-\\><C-n><C-w>" .. dir,
+            { desc = "Window " .. dir .. " (from terminal)" })
+    end
+
+    -- Entering a terminal window puts you straight into the shell, so jumping
+    -- back in is symmetric with jumping out. <Esc><Esc> still gives you Normal
+    -- mode for scrolling and copying output.
+    vim.api.nvim_create_autocmd({ "TermOpen", "WinEnter" }, {
+        group = aug,
+        desc = "Enter insert mode when moving into a terminal window",
+        callback = function()
+            if vim.bo.buftype == "terminal" then
+                vim.cmd("startinsert")
+            end
+        end,
+    })
+
+    -- To hide the terminal from inside it, use <C-x> like any other window.
+    
 end
 
 return M

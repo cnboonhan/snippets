@@ -154,12 +154,21 @@ and are deliberately not redefined.
 | `<leader>q` | toggle netrw file explorer (`:Explore` / `:Rexplore`) |
 | `<leader>d` | diagnostics to loclist |
 | `<leader>=` | LSP format |
-| `<leader>t` | toggle bottom terminal |
+| `<leader>t` | toggle terminal in a right split |
+| `<leader>T` | toggle terminal in a bottom split (same shell) |
 | `<leader>e` | send line / selection to the terminal and run it |
 | `<leader>r` | send a `path:line` reference instead of the code |
 | `<leader>i` | view the current file as an image |
 | `<C-h/j/k/l>` | move between windows, including out of the terminal |
+| `<C-x>` | hide the current window — buffer stays loaded, shells keep running |
 | `<Esc><Esc>` | terminal → normal mode |
+
+The two terminal keys are placements for one shell, not two terminals:
+pressing the other one moves it and keeps your history and running
+process. A leader key cannot work in terminal mode -- mapping `<Space>` there would
+hijack every "space then t" you type at the shell -- so `<C-x>` hides it from
+inside, the same key that hides any other window.
+
 | `<leader>1` `2` `3` | merge: take hunk from LOCAL / BASE / REMOTE |
 | `<leader>u` | merge: refresh the diff |
 | `]h` `[h` | jump to next / previous git hunk |
@@ -195,10 +204,19 @@ misleads: `gd` often appears to work while silently only matching text.
 
 ```
 setup.sh              installer (also: ssh-client HOST, ssh-server)
-init.lua              options, keymaps, autocmds, treesitter, LSP, plugins
-lsp/*.lua             one file per language server
-lua/terminal.lua      toggle terminal + send-to-terminal
+init.lua              sets the leader, then requires the modules below
+lua/options.lua       editor options
+lua/keymaps.lua       general keys, window hiding, netrw toggle
+lua/autocmds.lua      yank highlight, whitespace trim, cursor restore
+lua/reload.lua        instant reload when a file changes on disk
+lua/treesitter.lua    treesitter highlighting
+lua/lsp.lua           diagnostics, completion, per-buffer LSP setup
+lua/plugins.lua       vim.pack and the three plugins, with their keys
+lua/diffs.lua         diff colours and the mergetool keys
+lua/images.lua        image viewing
+lua/terminal.lua      the terminal, send-to-terminal, and its keys
 lua/prereq/           external tool checks (:checkhealth prereq)
+lsp/*.lua             one table per language server
 nvim-pack-lock.json   pinned plugin revisions
 ```
 

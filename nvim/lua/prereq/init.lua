@@ -91,4 +91,35 @@ function M.install()
     vim.cmd(("botright 15split | terminal %s install %s"):format(brew, table.concat(pkgs, " ")))
 end
 
+-- The user command and the startup warning.
+function M.setup()
+    local aug = vim.api.nvim_create_augroup("user.prereq", { clear = true })
+
+    -- :checkhealth prereq   what is missing and why
+    -- :PrereqInstall        brew install the missing formulae
+    vim.api.nvim_create_user_command("PrereqInstall", function()
+        M.install()
+    end, { desc = "brew install missing external tools" })
+
+    -- Say something once at startup if a tool is missing, but never install
+    -- without being asked: brew hits the network and changes the system.
+    vim.api.nvim_create_autocmd("VimEnter", {
+        group = aug,
+        desc = "Warn about missing external tools",
+        once = true,
+        callback = function()
+            local miss = M.missing()
+            if #miss > 0 then
+                local names = vim.tbl_map(function(r) return r.bin end, miss)
+                vim.notify(
+                    ("missing %d tool(s): %s\n:checkhealth prereq for detail, :PrereqInstall to fix")
+                        :format(#miss, table.concat(names, ", ")),
+                    vim.log.levels.WARN
+                )
+            end
+        end,
+    })
+    
+end
+
 return M
