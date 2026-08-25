@@ -1,7 +1,8 @@
 # nvim
 
-Minimal Neovim config: core-only apart from two plugins, installed by the
-built-in `vim.pack`. Python + Lua/shell LSP, fuzzy pickers, OSC 52 clipboard.
+Minimal Neovim config: core-only apart from three plugins, installed by the
+built-in `vim.pack`. Python + Lua/shell LSP, fuzzy pickers, git gutter signs,
+OSC 52 clipboard.
 
 ## Requirements
 
@@ -69,6 +70,32 @@ one side for the whole file with `:%diffget LOCAL`. `:wqa` writes and quits;
 applications — and git marks the file resolved from whatever you wrote, it
 never checks for leftover `<<<<<<<` markers. Re-read before `:wqa`.
 
+### git — reviewing changes with `difftool`
+
+`git difftool` opens the old and new versions side by side. Its two buffers
+are a throwaway copy of the old blob and your working file — **not** named
+LOCAL/BASE/REMOTE, so `<leader>1` / `2` / `3` do not apply here. Those are
+mergetool only; difftool uses the generic two-buffer commands:
+
+| Key | Action |
+| --- | --- |
+| `]c` / `[c` | next / previous change |
+| `do` | diff obtain — pull the other side's version into this window |
+| `dp` | diff put — push this window's version to the other |
+| `<C-h/j/k/l>` | switch between the two windows |
+| `zo` `zc` / `zR` `zM` | open / close one fold, or all (diff folds unchanged lines) |
+| `<leader>u` | `:diffupdate`, recompute after an edit |
+| `:qa` | close and advance to the *next* changed file |
+| `:cq` | abort the whole difftool run |
+
+Only the right-hand buffer is real — the left is a temp copy under `/tmp`, so
+edits there evaporate and you will reach for `do` far more than `dp`. And
+`:qa` advances rather than quits, because difftool walks the changed files one
+at a time; `:cq` is the way out.
+
+`git difftool --dir-diff` opens every changed file in one session instead of
+file by file, and `git difftool main...feature` diffs against any ref.
+
 ### Homebrew on `PATH` (Linux server)
 
 Ubuntu's `~/.bashrc` returns early for non-interactive shells, and login
@@ -125,16 +152,19 @@ redefined: `K` hover, `grn` rename, `gra` code action, `grr` references,
 | Key | Action |
 | --- | --- |
 | `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
-| `<leader>e` | netrw file explorer |
+| `<leader>q` | netrw file explorer |
 | `<leader>d` | diagnostics to loclist |
 | `<leader>=` | LSP format |
 | `<leader>t` | toggle bottom terminal |
-| `<C-e>` | send line / selection to the terminal and run it |
-| `<C-S-e>` or `<leader>r` | send a `path:line` reference instead of the code |
+| `<leader>e` | send line / selection to the terminal and run it |
+| `<leader>r` | send a `path:line` reference instead of the code |
 | `<C-h/j/k/l>` | move between windows, including out of the terminal |
 | `<Esc><Esc>` | terminal → normal mode |
 | `<leader>1` `2` `3` | merge: take hunk from LOCAL / BASE / REMOTE |
 | `<leader>u` | merge: refresh the diff |
+| `]h` `[h` | jump to next / previous git hunk |
+| `gh` | git hunk text object (`dgh` reset, `ghgh` select) |
+| `<leader>o` | toggle the inline git diff overlay |
 
 ## Layout
 

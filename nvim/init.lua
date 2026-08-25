@@ -74,7 +74,7 @@ map("n", "<C-l>", "<C-w>l", { desc = "Window right" })
 -- Get out of a :terminal buffer
 map("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Terminal: normal mode" })
 
-map("n", "<leader>e", "<cmd>Explore<CR>",        { desc = "File explorer (netrw)" })
+map("n", "<leader>q", "<cmd>Explore<CR>",        { desc = "File explorer (netrw)" })
 map("n", "<leader>d", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
 -- <leader>f / g / b / h are fuzzy pickers, set up in the Plugins section.
 
@@ -222,14 +222,10 @@ local term = require("terminal")
 map("n", "<leader>t", term.toggle, { desc = "Toggle bottom terminal" })
 
 -- Send the current line, or the visual selection, and run it.
--- <C-e>'s only built-in job is scrolling down one line.
-map({ "n", "x" }, "<C-e>", term.send, { desc = "Send line/selection to terminal" })
+map({ "n", "x" }, "<leader>e", term.send, { desc = "Send line/selection to terminal" })
 
 -- Same gesture, but sends a `path:line` reference rather than the code, so an
--- agent in the terminal can look at what you are looking at. Ctrl+Shift+E is
--- only distinguishable from Ctrl+E under the kitty keyboard protocol, which
--- Ghostty speaks; <leader>r is the fallback on terminals that do not.
-map({ "n", "x" }, "<C-S-e>",   term.send_ref, { desc = "Send path:line reference to terminal" })
+-- agent in the terminal can look at what you are looking at.
 map({ "n", "x" }, "<leader>r", term.send_ref, { desc = "Send path:line reference to terminal" })
 
 -- Window navigation straight out of terminal mode, so leaving the terminal
@@ -254,7 +250,6 @@ vim.api.nvim_create_autocmd({ "TermOpen", "WinEnter" }, {
     end,
 })
 
--- Deliberately no <C-e> in terminal mode: the shell binds it to end-of-line.
 -- To hide the terminal: <C-k> out of it, then <leader>t.
 
 -- ── Plugins ───────────────────────────────────────────────────────────
@@ -264,6 +259,9 @@ vim.api.nvim_create_autocmd({ "TermOpen", "WinEnter" }, {
 vim.pack.add({
     -- Fuzzy pickers. No dependencies and no external binary.
     { src = "https://github.com/echasnovski/mini.pick" },
+
+    -- Git gutter signs and hunk staging. Same author, same lack of deps.
+    { src = "https://github.com/echasnovski/mini.diff" },
 
     -- Build tool for treesitter parsers, not a runtime dependency: it
     -- compiles into site/parser, which nvim finds on its own.
@@ -277,6 +275,11 @@ vim.pack.add({
 
 require("mini.pick").setup()
 
+-- Gutter signs against the git index: + added, ~ changed, - deleted.
+require("mini.diff").setup({
+    view = { style = "sign", signs = { add = "+", change = "~", delete = "-" } },
+})
+
 local pick = function(name)
     return function() require("mini.pick").builtin[name]() end
 end
@@ -285,6 +288,10 @@ map("n", "<leader>f", pick("files"),     { desc = "Fuzzy: files" })
 map("n", "<leader>g", pick("grep_live"), { desc = "Fuzzy: live grep" })
 map("n", "<leader>b", pick("buffers"),   { desc = "Fuzzy: buffers" })
 map("n", "<leader>h", pick("help"),      { desc = "Fuzzy: help tags" })
+
+-- Git hunks: [h / ]h jump, gh is the hunk text object (ghgh, dgh, ...).
+map("n", "<leader>o", function() require("mini.diff").toggle_overlay(0) end,
+    { desc = "Git: toggle inline diff overlay" })
 
 -- ── Prerequisites ─────────────────────────────────────────────────────
 -- :checkhealth prereq   what is missing and why
@@ -313,6 +320,25 @@ vim.api.nvim_create_autocmd("VimEnter", {
 })
 
 -- ── Diff / merge ──────────────────────────────────────────────────────
+-- nvim's defaults paint a changed line grey and the changed text teal, which
+-- says "something differs" without saying what. Repaint them so the meaning
+-- is obvious at a glance: green added, red removed, amber changed. Leaving
+-- fg unset on the line-level groups lets syntax highlighting show through.
+local function diff_colors()
+    local hl = vim.api.nvim_set_hl
+    hl(0, "DiffAdd",    { bg = "#1f3b28" })                   -- whole line added
+    hl(0, "DiffDelete", { bg = "#3b1f24", fg = "#8f5a63" })   -- removed / filler
+    hl(0, "DiffChange", { bg = "#33301f" })                   -- line holding a change
+    hl(0, "DiffText",   { bg = "#6b5411", fg = "#ffe9a3", bold = true }) -- the change
+end
+
+diff_colors()
+vim.api.nvim_create_autocmd("ColorScheme", {
+    group = aug,
+    desc = "Keep the diff colours across a colorscheme change",
+    callback = diff_colors,
+})
+
 -- `git mergetool` stacks LOCAL / BASE / REMOTE above the MERGED buffer you
 -- edit. ]c and [c already jump between hunks, so only "take this side" is
 -- missing. Defined unconditionally: git launches nvim without -d (it calls
