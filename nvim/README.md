@@ -156,7 +156,8 @@ and are deliberately not redefined.
 | `gt` `gT` | next / previous tab (built-in); `2gt` jumps to tab 2 |
 | `<leader>=` | LSP format |
 | `<leader>t` / `<leader>T` | toggle the side / bottom terminal panel |
-| `<leader>n` | another shell when in a terminal, otherwise a new tab |
+| `<C-t>` | new shell in a terminal, otherwise a new tab |
+| `<C-n>` / `<C-p>` | next / previous shell in a terminal, otherwise next / previous tab |
 | `gt` `gT` `2gt` | inside a terminal: next / previous / Nth shell |
 | `<leader>]` / `<leader>[` | next / previous shell in that panel |
 | `<leader>e` / `<leader>E` | send line or selection to the side / bottom terminal |
@@ -200,7 +201,8 @@ Go-to-definition is the built-in tag jump: on LSP attach nvim sets
 | Key | Action |
 | --- | --- |
 | `<C-]>` | go to definition |
-| `<C-t>` | jump back (tag stack; repeat to unwind) |
+| `<C-o>` | jump back (jumplist; tag jumps land in it too) |
+| ~~`<C-t>`~~ | the tag-stack jump back, **remapped** to "new shell/tab" — use `<C-o>` |
 | `<C-w>]` | definition in a horizontal split |
 | `<C-w>}` | definition in a preview window |
 | `g<C-]>` | `:tjump` — pick from a list when several match |
@@ -242,7 +244,9 @@ nvim-pack-lock.json   pinned plugin revisions
 
 - State that survives closing nvim: undo history ('undofile'), marks,
   registers and search/command history (shada), and the window/tab layout per
-  directory. Bare `nvim` in a directory restores its layout; `nvim foo.py` just
+  directory. Terminal windows come back too, with their shells restarted --
+  live, but with no scrollback, and only the ones that were visible in a
+  window. Restored terminals are adopted by the panel keys. Bare `nvim` in a directory restores its layout; `nvim foo.py` just
   opens that file. `:SessionRestore` restores on demand. Headless runs neither
   save nor restore, so scripts cannot clobber a layout.
 - Completion is nvim's built-in LSP completion. `autotrigger` alone only fires

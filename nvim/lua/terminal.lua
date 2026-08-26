@@ -9,13 +9,16 @@ local WIDTH = 80
 -- Per tabpage, so a tab is a self-contained workspace.
 local per_tab = {}
 
-local function panels()
-    local tab = vim.api.nvim_get_current_tabpage()
+local function panels_for(tab)
     per_tab[tab] = per_tab[tab] or {
         right = { vertical = true, bufs = {}, cur = 1 },
         bottom = { vertical = false, bufs = {}, cur = 1 },
     }
     return per_tab[tab]
+end
+
+local function panels()
+    return panels_for(vim.api.nvim_get_current_tabpage())
 end
 
 local function panel(name)
@@ -250,6 +253,27 @@ function M.cycle(delta, name)
     end
 end
 
+-- Take ownership of terminal windows this module did not create -- the ones a
+-- restored session brings back, whose shells nvim restarts for us. Without
+-- this they would work as windows but be invisible to the panel keys, and
+-- <leader>t would open a second terminal beside them.
+function M.adopt()
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(w)
+        if vim.bo[buf].buftype == "terminal" then
+            local p = panels_for(vim.api.nvim_win_get_tabpage(w))
+            -- A side panel is narrower than the screen; a bottom one spans it.
+            local slot = vim.api.nvim_win_get_width(w) < vim.o.columns and p.right or p.bottom
+            if not vim.tbl_contains(slot.bufs, buf) then
+                table.insert(slot.bufs, buf)
+                slot.cur = #slot.bufs
+                slot.win = w
+                vim.bo[buf].buflisted = false
+            end
+        end
+    end
+end
+
 -- A closed tab's shells would otherwise linger as hidden buffers with live
 -- processes, so reap them along with the tab.
 local function reap_closed_tabs()
@@ -339,8 +363,8 @@ function M.setup()
     map("n", "<leader>t", function() M.toggle("right") end, { desc = "Toggle side terminal" })
     map("n", "<leader>T", function() M.toggle("bottom") end, { desc = "Toggle bottom terminal" })
 
+
     -- These act on the panel the cursor is in, or the side panel otherwise.
-    -- <leader>n also makes a new shell when you are in one; see keymaps.lua.
     map("n", "<leader>]", function() M.cycle(1) end, { desc = "Next shell in this panel" })
     map("n", "<leader>[", function() M.cycle(-1) end, { desc = "Previous shell in this panel" })
 
@@ -354,15 +378,6 @@ function M.setup()
         { desc = "Send path:line reference to side terminal" })
     map({ "n", "x" }, "<leader>R", function() M.send_ref("bottom") end,
         { desc = "Send path:line reference to bottom terminal" })
-
-    -- Window navigation straight out of terminal mode, so leaving the terminal
-    -- never needs <Esc><Esc> first. This shadows four readline keys *inside the
-    -- terminal only*: C-h backward-delete-char, C-j accept-line, C-k kill-line,
-    -- C-l clear-screen. Drop a line here to hand any of them back to the shell.
-    for _, dir in ipairs({ "h", "j", "k", "l" }) do
-        map("t", "<C-" .. dir .. ">", "<C-\\><C-n><C-w>" .. dir,
-            { desc = "Window " .. dir .. " (from terminal)" })
-    end
 
     -- Entering a terminal window puts you straight into the shell, so jumping
     -- back in is symmetric with jumping out. <Esc><Esc> still gives you Normal

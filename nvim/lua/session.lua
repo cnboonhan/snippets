@@ -5,10 +5,6 @@ local M = {}
 
 local aug = vim.api.nvim_create_augroup("user.session", { clear = true })
 
--- 'terminal' is in the default sessionoptions, which would restore our two
--- shells as dead buffers. Starting them fresh is better.
-vim.opt.sessionoptions:remove("terminal")
-
 local dir = vim.fn.stdpath("state") .. "/sessions"
 
 -- One session per working directory, named after it the way nvim names undo
@@ -44,6 +40,10 @@ function M.restore()
         return false
     end
     vim.cmd("silent source " .. vim.fn.fnameescape(f))
+    -- 'terminal' is in the default sessionoptions, so nvim brings terminal
+    -- windows back and restarts their shells. Hand them to the terminal module
+    -- so the panel keys manage them rather than ignoring them.
+    pcall(function() require("terminal").adopt() end)
     return true
 end
 

@@ -9,11 +9,24 @@ local map = vim.keymap.set
 
 map("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlight" })
 
--- Window navigation without the <C-w> prefix
-map("n", "<C-h>", "<C-w>h", { desc = "Window left" })
-map("n", "<C-j>", "<C-w>j", { desc = "Window down" })
-map("n", "<C-k>", "<C-w>k", { desc = "Window up" })
-map("n", "<C-l>", "<C-w>l", { desc = "Window right" })
+-- Window navigation without the <C-w> prefix, in normal and terminal mode.
+-- Ctrl+letter is a real control code (0x08 and friends), so unlike <C-,> these
+-- actually reach nvim from inside a shell. They stop at the edges.
+local function nav(dir)
+    return function()
+        if vim.bo.buftype == "terminal" then
+            vim.cmd("stopinsert")
+            vim.schedule(function() vim.cmd("wincmd " .. dir) end)
+        else
+            vim.cmd("wincmd " .. dir)
+        end
+    end
+end
+
+map({ "n", "t" }, "<C-h>", nav("h"), { desc = "Window left" })
+map({ "n", "t" }, "<C-j>", nav("j"), { desc = "Window down" })
+map({ "n", "t" }, "<C-k>", nav("k"), { desc = "Window up" })
+map({ "n", "t" }, "<C-l>", nav("l"), { desc = "Window right" })
 
 -- Hide the current window, keeping its buffer loaded -- and for the terminal,
 -- its shell running. Escalates rather than refusing: when this is the tab's
@@ -88,19 +101,38 @@ map("n", "<leader>q", function()
 end, { desc = "Toggle file explorer (netrw)" })
 map("n", "<leader>d", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
 
+
+
 -- Tabs. Switching is already built in and not redefined: gt / gT step through
 -- them and {count}gt jumps straight to one (2gt = second tab). <leader>1..3
 -- would be the obvious jump keys but they are the mergetool diffget keys.
 -- 'showtabline' is 1 by default, so the tabline appears once a second tab does.
--- One "new" key: another shell when you are in a terminal panel, otherwise a
--- new tab. Inside a terminal, gt / gT / 2gt select shells the same way they
--- select tabpages elsewhere.
-map("n", "<leader>n", function()
-    if vim.bo.buftype == "terminal" then
-        require("terminal").new()
-    else
-        vim.cmd("tabnew")
+-- next / previous / new, at whatever level you are in: shells inside a terminal
+-- panel, tabpages anywhere else. All three are real control codes, so they
+-- arrive from inside a shell -- unlike <C-,> or <C-S-p>, which need the kitty
+-- keyboard protocol and never showed up.
+local function at_level(shell_fn, tab_cmd)
+    return function()
+        if vim.bo.buftype == "terminal" then
+            vim.cmd("stopinsert")
+            vim.schedule(function()
+                shell_fn(require("terminal"))
+                vim.cmd("startinsert") -- ready to type in whatever we landed on
+            end)
+        else
+            pcall(vim.cmd, tab_cmd)
+        end
     end
-end, { desc = "New shell (in a terminal) or new tab" })
+end
+
+map({ "n", "t" }, "<C-n>", at_level(function(t) t.cycle(1) end, "tabnext"),
+    { desc = "Next shell (in a terminal) or next tab" })
+map({ "n", "t" }, "<C-p>", at_level(function(t) t.cycle(-1) end, "tabprevious"),
+    { desc = "Previous shell (in a terminal) or previous tab" })
+-- <C-t> rather than <C-a> for "new": inside a shell <C-a> is beginning-of-line,
+-- which you would miss constantly, while <C-t> is only transpose-chars. In
+-- normal mode it costs the tag-stack jump back -- use <C-o>, the jumplist.
+map({ "n", "t" }, "<C-t>", at_level(function(t) t.new() end, "tabnew"),
+    { desc = "New shell (in a terminal) or new tab" })
 -- No close-tab key: <C-x> already closes the tab once it is the last window.
 -- <leader>f / g / b / h are fuzzy pickers, set up in the Plugins section.
