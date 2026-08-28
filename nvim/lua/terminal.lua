@@ -267,6 +267,19 @@ function M.adopt()
                 slot.cur = #slot.bufs
                 slot.win = w
                 vim.bo[buf].buflisted = false
+
+                -- nvim restarted this shell itself, so it never went through
+                -- open() and never got the project environment. Source it now,
+                -- deferred so the shell is up and reading input.
+                local script = venv_activate(buf)
+                if script then
+                    vim.defer_fn(function()
+                        if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].channel ~= 0 then
+                            vim.fn.chansend(vim.bo[buf].channel,
+                                ("source %s\n"):format(vim.fn.shellescape(script)))
+                        end
+                    end, 300)
+                end
             end
         end
     end
@@ -352,6 +365,87 @@ function M.send_ref(name)
     deliver(name, ref .. " ")
 end
 
+-- The reverse of send: take what you have highlighted -- typically terminal
+-- output, after <Esc><Esc> and a visual selection -- and drop it into the
+-- editor buffer below its cursor. With dedent, the common leading whitespace
+-- is removed while relative indentation survives, so a copied code block keeps
+-- its shape instead of collapsing flat.
+function M.yank_to_editor(dedent)
+    local lines = payload()
+    if dedent then
+        -- Measure the shallowest indent among non-blank lines; blank lines
+        -- would otherwise report zero and defeat the whole thing.
+        local common
+        for _, line in ipairs(lines) do
+            if line:match("%S") then
+                local indent = #line:match("^%s*")
+                common = (common == nil or indent < common) and indent or common
+            end
+        end
+        if common and common > 0 then
+            lines = vim.tbl_map(function(line) return line:sub(common + 1) end, lines)
+        end
+    end
+
+    -- The editor pane: a real file window in this tab, not a terminal.
+    local target
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        local b = vim.api.nvim_win_get_buf(w)
+        if vim.bo[b].buftype == "" then
+            target = w
+            break
+        end
+    end
+    if not target then
+        return vim.notify("no editor window in this tab", vim.log.levels.WARN)
+    end
+
+    local buf = vim.api.nvim_win_get_buf(target)
+    if not vim.bo[buf].modifiable then
+        return vim.notify("target buffer is not modifiable", vim.log.levels.WARN)
+    end
+
+    local row = vim.api.nvim_win_get_cursor(target)[1]
+    vim.api.nvim_buf_set_lines(buf, row, row, false, lines)
+    -- Go with it: you almost always want to look at what just landed.
+    vim.api.nvim_set_current_win(target)
+    vim.api.nvim_win_set_cursor(target, { row + 1, 0 })
+
+    local name = vim.api.nvim_buf_get_name(buf)
+    vim.notify(("%d line%s -> %s"):format(#lines, #lines == 1 and "" or "s",
+        name ~= "" and vim.fn.fnamemodify(name, ":t") or "[No Name]"))
+end
+
+-- Source an environment in shells that already exist. Only idle ones: a shell
+-- running a REPL or an agent would receive this as that program's input rather
+-- than as a command, so busy shells are skipped and counted. A shell sitting at
+-- its prompt has no child processes, which is how we tell.
+function M.activate_in_open_shells(script)
+    if vim.fn.filereadable(script) == 0 then
+        return 0, 0
+    end
+    local line = ("source %s\n"):format(vim.fn.shellescape(script))
+    local sourced, busy = 0, 0
+    for _, pair in pairs(per_tab) do
+        for _, p in pairs(pair) do
+            for _, buf in ipairs(p.bufs or {}) do
+                if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].channel ~= 0 then
+                    local pid = vim.fn.jobpid(vim.bo[buf].channel)
+                    local kids = vim.system({ "pgrep", "-P", tostring(pid) },
+                        { text = true }):wait(1000)
+                    if ((kids.stdout or ""):gsub("%s+", "")) == "" then
+                        vim.fn.chansend(vim.bo[buf].channel, line)
+                        sourced = sourced + 1
+                    else
+                        busy = busy + 1
+                    end
+                end
+            end
+        end
+    end
+    return sourced, busy
+end
+
 -- Keymaps and autocommands for the above. Called from init.lua so that this
 -- file owns its own bindings rather than scattering them.
 function M.setup()
@@ -373,6 +467,14 @@ function M.setup()
         { desc = "Send line/selection to bottom terminal" })
     map({ "n", "x" }, "<leader>E", function() M.send("right") end,
         { desc = "Send line/selection to side terminal" })
+    -- Back the other way: highlighted text into the editor buffer. Dedented by
+    -- default, since terminal output almost always arrives indented and you
+    -- rarely want that indentation. Upper case keeps it verbatim.
+    map({ "n", "x" }, "<leader>y", function() M.yank_to_editor(true) end,
+        { desc = "Send highlighted text to the editor, dedented" })
+    map({ "n", "x" }, "<leader>Y", function() M.yank_to_editor(false) end,
+        { desc = "Send highlighted text to the editor, verbatim" })
+
     map({ "n", "x" }, "<leader>r", function() M.send_ref("right") end,
         { desc = "Send path:line reference to side terminal" })
     map({ "n", "x" }, "<leader>R", function() M.send_ref("bottom") end,

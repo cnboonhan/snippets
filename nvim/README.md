@@ -161,6 +161,7 @@ while you are typing in a shell.
 | `<leader>t` / `<leader>T` | toggle the side / bottom terminal panel |
 | `<leader>e` / `<leader>E` | send line or selection to the **bottom** / side terminal |
 | `<leader>r` / `<leader>R` | send a `path:line` reference to the **side** / bottom terminal |
+| `<leader>y` / `<leader>Y` | pull the highlighted text into the editor buffer — dedented / verbatim |
 | `<leader>]` / `<leader>[` | next / previous shell in a panel, from anywhere |
 | `<leader>d` | diagnostics to the location list |
 | `<leader>=` | format via the language server |
@@ -171,6 +172,12 @@ while you are typing in a shell.
 Lower case sends commands to the bottom panel and references to the side one,
 on purpose: commands belong with the shell you run things in, references belong
 with the agent reading them.
+
+`<leader>y` is the return path: `<Esc><Esc>` out of a shell, `V` to highlight
+output, then `<leader>y` drops it into the editor below the cursor and follows
+it there. It dedents by default, because output almost always arrives indented
+and that indentation is rarely wanted; `<leader>Y` keeps it verbatim. Dedent
+removes only the *common* indent, so a copied block keeps its shape.
 
 ### Commands
 
@@ -253,7 +260,9 @@ nvim-pack-lock.json   pinned plugin revisions
   registers and search/command history (shada), and the window/tab layout per
   directory. Terminal windows come back too, with their shells restarted --
   live, but with no scrollback, and only the ones that were visible in a
-  window. Restored terminals are adopted by the panel keys. Bare `nvim` in a directory restores its layout; `nvim foo.py` just
+  window. Restored terminals are adopted by the panel keys, and get the
+  project environment sourced -- nvim restarts those shells itself, so they
+  never pass through the code that would otherwise activate the venv. Bare `nvim` in a directory restores its layout; `nvim foo.py` just
   opens that file. `:SessionRestore` restores on demand. Headless runs neither
   save nor restore, so scripts cannot clobber a layout.
 - Completion is nvim's built-in LSP completion. `autotrigger` alone only fires
@@ -276,8 +285,16 @@ nvim-pack-lock.json   pinned plugin revisions
   zoom, pan and video seeking. `miniserve` is preferred over python3's
   http.server because the latter has no Range support, so video cannot seek.
 - Python environment: `:Venv` browses for one, sets `$VIRTUAL_ENV` and `$PATH`,
-  restarts basedpyright against the new interpreter, and makes new terminal
-  shells source it. No nvim restart needed.
+  restarts basedpyright against the new interpreter, sources it in terminals
+  that are already open, and makes new shells source it too. No nvim restart
+  needed. Shells that are *busy* are skipped and reported: sending `source ...`
+  to a shell running a REPL or an agent would go to that program as input, not
+  to the shell. A shell at its prompt has no child processes, which is the test.
+  The choice is remembered per working directory under `stdpath("state")/venvs`,
+  so a restart keeps it -- otherwise an environment living outside the project
+  would be lost, since the upward search cannot see it. A venv activated in the
+  shell that launched nvim wins over the remembered one, and a remembered venv
+  that has been deleted is forgotten rather than failing every startup.
 - Update plugins: `:lua vim.pack.update()`, review the diff, `:w` to apply.
 - Add a parser: `:lua require("nvim-treesitter").install({"go"})`.
 - Buffers reload the instant a file changes on disk -- a git checkout, a

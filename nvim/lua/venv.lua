@@ -5,6 +5,33 @@
 --   * new terminal shells, which source the venv on creation
 local M = {}
 
+-- Remember the choice per working directory: :Venv only changes this nvim
+-- process, so without this a restart loses an environment that lives outside
+-- the project, where the upward search cannot find it.
+local STORE = vim.fn.stdpath("state") .. "/venvs"
+
+local function store_path()
+    return ("%s/%s"):format(STORE, (vim.fn.getcwd():gsub("/", "%%")))
+end
+
+local function remember(dir)
+    vim.fn.mkdir(STORE, "p")
+    pcall(vim.fn.writefile, { dir }, store_path())
+end
+
+local function recall()
+    local f = store_path()
+    if vim.fn.filereadable(f) == 0 then
+        return nil
+    end
+    local dir = (vim.fn.readfile(f)[1] or ""):gsub("%s+$", "")
+    if dir ~= "" and vim.fn.filereadable(dir .. "/bin/python") == 1 then
+        return dir
+    end
+    -- Gone or moved: forget it rather than failing on every startup.
+    pcall(vim.fn.delete, f)
+end
+
 -- The nearest environment at or above you, used only to choose where browsing
 -- starts so you are usually one keystroke from the obvious answer.
 local function nearest_venv()
@@ -39,14 +66,10 @@ local function restart_lsp()
     return restarted
 end
 
-function M.use(dir)
-    dir = vim.fn.fnamemodify(vim.fn.expand(dir), ":p"):gsub("/$", "")
+-- The environment half: variables and the LSP setting, no restarts. Startup
+-- needs exactly this and nothing more, since no client has attached yet.
+local function apply(dir)
     local python = dir .. "/bin/python"
-    if vim.fn.filereadable(python) == 0 then
-        return vim.notify("no interpreter at " .. python, vim.log.levels.WARN)
-    end
-
-    -- Strip a previously activated venv from PATH so they do not stack up.
     local old = vim.env.VIRTUAL_ENV
     local path = vim.env.PATH
     if old then
@@ -54,15 +77,33 @@ function M.use(dir)
     end
     vim.env.VIRTUAL_ENV = dir
     vim.env.PATH = dir .. "/bin:" .. path
-
-    -- Tell basedpyright which interpreter to use, then bring it back.
     vim.lsp.config("basedpyright", {
         settings = { python = { pythonPath = python } },
     })
+end
+
+function M.use(dir)
+    dir = vim.fn.fnamemodify(vim.fn.expand(dir), ":p"):gsub("/$", "")
+    local python = dir .. "/bin/python"
+    if vim.fn.filereadable(python) == 0 then
+        return vim.notify("no interpreter at " .. python, vim.log.levels.WARN)
+    end
+
+    apply(dir)
+    remember(dir)
     local stopped = restart_lsp()
 
-    vim.notify(("venv: %s\nbasedpyright restarted (%d client%s)")
-        :format(vim.fn.fnamemodify(dir, ":~"), #stopped, #stopped == 1 and "" or "s"))
+    -- Shells that are already open would otherwise keep the old interpreter.
+    local sourced, busy = require("terminal").activate_in_open_shells(dir .. "/bin/activate")
+
+    local msg = ("venv: %s\nbasedpyright restarted (%d client%s), %d open shell%s updated")
+        :format(vim.fn.fnamemodify(dir, ":~"), #stopped, #stopped == 1 and "" or "s",
+            sourced, sourced == 1 and "" or "s")
+    if busy > 0 then
+        msg = msg .. ("\n%d shell%s busy, left alone: activate by hand there")
+            :format(busy, busy == 1 and "" or "s")
+    end
+    vim.notify(msg)
 end
 
 function M.current()
@@ -111,7 +152,24 @@ end
 
 M.choose_or_enter = choose_or_enter
 
+-- Reapply the remembered environment for this directory. Never overrides one
+-- the launching shell already activated: that is a deliberate choice too.
+function M.restore()
+    if vim.env.VIRTUAL_ENV then
+        return false
+    end
+    local dir = recall()
+    if not dir then
+        return false
+    end
+    apply(dir)
+    return true
+end
+
 function M.setup()
+    -- Before any client attaches, so basedpyright starts on the right one.
+    M.restore()
+
     vim.api.nvim_create_user_command("Venv", function(opts)
         if opts.args == "" then
             return M.browse()
