@@ -50,6 +50,7 @@ subcommands above, or the manual steps here.
 | `~/.ssh/config` | client | send `COLORTERM` |
 | `/etc/ssh/sshd_config.d/99-colorterm.conf` | server | accept `COLORTERM` |
 | `~/.config/ghostty/config` | client | get terminfo onto servers |
+| `~/.zshrc`; `~/.profile` + `~/.bashrc` | both | keep Claude Code off the alternate screen |
 
 ### git — 3-way merge
 
@@ -143,6 +144,41 @@ or push it once per host:
 infocmp -x xterm-ghostty | ssh myserver -- tic -x -
 ```
 
+### Claude Code on the primary screen
+
+Claude Code draws into the terminal's *alternate screen* — it emits
+`ESC[?1049h` at startup — and that second screen buffer has no scrollback: only
+the frame currently drawn exists. Nothing older is anywhere for a terminal to
+scroll to, so in an nvim panel `<Esc><Esc>` then `gg` lands at the top of the
+*visible* frame with the rest of the session unreachable.
+
+```sh
+export CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1
+```
+
+`~/.zshrc` on the macOS client. On the Linux server it goes in **both**
+`~/.profile` and `~/.bashrc`, for the same reason Homebrew's line does: login
+shells read the first, interactive non-login shells (a tmux pane) read only the
+second, and neither sources the other.
+
+Claude Code then renders on the primary screen, where its history scrolls off
+into the terminal's own scrollback — nvim's terminal buffer (10000 lines, the
+default) in a panel, Ghostty's scrollback in a tab. Both machines set it in the
+shell so it applies everywhere; `lua/terminal.lua` also sets it on nvim's own
+environment, which every shell nvim spawns inherits, so panels keep working on
+a machine where the profile line is missing.
+
+To check which screen any program uses, capture it through a pty and look for
+the sequence — a count of 1 means it switched, 0 means it stayed put:
+
+```sh
+grep -ac '\[?1049h' capture.bin
+```
+
+Related variables in the same group, if the mouse behaviour needs adjusting
+too: `CLAUDE_CODE_DISABLE_VIRTUAL_SCROLL` (stop Claude Code handling scroll
+events itself), `CLAUDE_CODE_SCROLL_SPEED`, `CLAUDE_CODE_DISABLE_MOUSE`.
+
 ## Keys
 
 Leader is `Space`. Terminal keys work in terminal mode too, so they reach you
@@ -155,7 +191,7 @@ while you are typing in a shell.
 | `<C-t>` | new — shell inside a terminal, otherwise tab |
 | `<C-x>` | hide the window; on a tab's last window, close the tab |
 | `<Esc>` | clear search highlight |
-| `<Esc><Esc>` | terminal → normal mode |
+| `<Esc><Esc>` | terminal → normal mode, for scrolling and copying output |
 | `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
 | `<leader>q` | toggle the file explorer (mini.files) |
 | `<leader>t` / `<leader>T` | toggle the side / bottom terminal panel |
@@ -174,10 +210,25 @@ on purpose: commands belong with the shell you run things in, references belong
 with the agent reading them.
 
 `<leader>y` is the return path: `<Esc><Esc>` out of a shell, `V` to highlight
-output, then `<leader>y` drops it into the editor below the cursor and follows
-it there. It dedents by default, because output almost always arrives indented
-and that indentation is rarely wanted; `<leader>Y` keeps it verbatim. Dedent
-removes only the *common* indent, so a copied block keeps its shape.
+output, then `<leader>y` drops it into the editor below its cursor. Focus stays
+in the terminal so you can keep picking; successive yanks stack in order rather
+than piling up in reverse. It dedents by default, because output almost always
+arrives indented and that indentation is rarely wanted; `<leader>Y` keeps it
+verbatim. Dedent removes only the *common* indent, so a copied block keeps its
+shape.
+
+Scrolling a panel means leaving terminal mode first: `<Esc><Esc>`, then
+`<C-b>` / `<C-u>` / `gg` as usual. The window and shell keys above are mapped
+in terminal mode and will not scroll, and a full-screen TUI has no history to
+offer at all — see [Claude Code on the primary
+screen](#claude-code-on-the-primary-screen).
+
+### Insert mode
+
+| Key | Action |
+| --- | --- |
+| `<C-Space>` | ask for completion by hand (`<C-x><C-o>` also works) |
+| `<Tab>` / `<S-Tab>` | jump between snippet placeholders, otherwise a plain Tab |
 
 ### Commands
 
@@ -191,6 +242,7 @@ removes only the *common* indent, so a copied block keeps its shape.
 | `:Blame` | git blame for the current line |
 | `:SessionRestore` | restore this directory's layout |
 | `:PrereqInstall` | brew install any missing external tools |
+| `:checkhealth prereq` | report which external tools are missing |
 
 ### Already in nvim or the plugins
 
@@ -204,6 +256,7 @@ Not configured here, but present — worth knowing before installing anything:
 | `]<Space>` `[<Space>` | add an empty line below / above |
 | `gx` | open the file or URL under the cursor |
 | `<C-w>d` | diagnostics for the line in a float |
+| `<C-s>` | signature help, in insert mode |
 | `]h` `[h` `]H` `[H` `gh` `gH` | git hunks: move, first/last, apply, reset (mini.diff) |
 | `]n` `[n` `an` `in` | treesitter node selection (nvim-treesitter) |
 
@@ -258,29 +311,28 @@ nvim-pack-lock.json   pinned plugin revisions
 
 - State that survives closing nvim: undo history ('undofile'), marks,
   registers and search/command history (shada), and the window/tab layout per
-  directory. Terminal windows come back too, with their shells restarted --
+  directory. Terminal windows come back too, with their shells restarted —
   live, but with no scrollback, and only the ones that were visible in a
   window. Restored terminals are adopted by the panel keys, and get the
-  project environment sourced -- nvim restarts those shells itself, so they
-  never pass through the code that would otherwise activate the venv. Bare `nvim` in a directory restores its layout; `nvim foo.py` just
-  opens that file. `:SessionRestore` restores on demand. Headless runs neither
-  save nor restore, so scripts cannot clobber a layout.
+  project environment sourced — nvim restarts those shells itself, so they
+  never pass through the code that would otherwise activate the venv. Bare
+  `nvim` in a directory restores its layout; `nvim foo.py` just opens that
+  file. `:SessionRestore` restores on demand. Headless runs neither save nor
+  restore, so scripts cannot clobber a layout.
 - Completion is nvim's built-in LSP completion. `autotrigger` alone only fires
-  on the server's trigger characters -- for basedpyright `.` `[` `"` `'` -- so
+  on the server's trigger characters — for basedpyright `.` `[` `"` `'` — so
   it covers `foo.` but never a bare identifier. A `TextChangedI` autocommand
   asks for completion once two word characters have been typed, which is what
   makes variables complete. `<C-Space>` triggers it by hand, `<C-x><C-o>` also
   works. 'completeopt' uses `noselect` so `<CR>` stays a newline.
-- Update plugins: `:lua vim.pack.update()`, review the diff, `:w` to apply.
-- Add a parser: `:lua require("nvim-treesitter").install({"go"})`.
-- Buffers reload the instant a file changes on disk -- a git checkout, a
-  formatter, an agent -- using the OS's own notifications (inotify / FSEvents),
+- Buffers reload the instant a file changes on disk — a git checkout, a
+  formatter, an agent — using the OS's own notifications (inotify / FSEvents),
   measured at 2-11 ms. The watch is on the file's *directory*, not the file:
   atomic writers replace the inode, and a watch on the file itself would then
   be pointing at a dead one. Unsaved edits are never lost: nvim warns with
   `W12` and keeps your version.
 - Images and video: nvim cannot draw them, and a terminal render has no zoom
-  or pan. Use `:Serve` and open `http://127.0.0.1:8000` in a browser -- over
+  or pan. Use `:Serve` and open `http://127.0.0.1:8000` in a browser — over
   SSH forward it with `ssh -L 8000:localhost:8000 <host>`. That gives real
   zoom, pan and video seeking. `miniserve` is preferred over python3's
   http.server because the latter has no Range support, so video cannot seek.
@@ -291,16 +343,13 @@ nvim-pack-lock.json   pinned plugin revisions
   to a shell running a REPL or an agent would go to that program as input, not
   to the shell. A shell at its prompt has no child processes, which is the test.
   The choice is remembered per working directory under `stdpath("state")/venvs`,
-  so a restart keeps it -- otherwise an environment living outside the project
+  so a restart keeps it — otherwise an environment living outside the project
   would be lost, since the upward search cannot see it. A venv activated in the
   shell that launched nvim wins over the remembered one, and a remembered venv
   that has been deleted is forgotten rather than failing every startup.
+- A full-screen TUI in a panel keeps no history nvim can reach, because the
+  alternate screen has no scrollback. For Claude Code there is a variable that
+  fixes it, set on both machines — see [Claude Code on the primary
+  screen](#claude-code-on-the-primary-screen).
 - Update plugins: `:lua vim.pack.update()`, review the diff, `:w` to apply.
 - Add a parser: `:lua require("nvim-treesitter").install({"go"})`.
-- Buffers reload the instant a file changes on disk -- a git checkout, a
-  formatter, an agent -- using the OS's own notifications (inotify / FSEvents),
-  measured at 2-11 ms. The watch is on the file's *directory*, not the file:
-  atomic writers replace the inode, and a watch on the file itself would then
-  be pointing at a dead one. Unsaved edits are never lost: nvim warns with
-  `W12` and keeps your version.
-

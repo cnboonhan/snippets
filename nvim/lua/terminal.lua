@@ -260,8 +260,15 @@ function M.adopt()
         local buf = vim.api.nvim_win_get_buf(w)
         if vim.bo[buf].buftype == "terminal" then
             local p = panels_for(vim.api.nvim_win_get_tabpage(w))
-            -- A side panel is narrower than the screen; a bottom one spans it.
-            local slot = vim.api.nvim_win_get_width(w) < vim.o.columns and p.right or p.bottom
+            -- Which panel this was, by where the window sits. Row, not width:
+            -- botright vsplit puts a side panel at row 0 spanning the full
+            -- height, while belowright split always leaves an editor window
+            -- above a bottom panel. Width cannot tell them apart, because a
+            -- bottom panel is squeezed into the editor's column whenever the
+            -- side panel is open too, making it narrower than the screen as
+            -- well -- which filed it as a side shell and left the bottom panel
+            -- looking empty, so sending to it spawned a second shell.
+            local slot = vim.api.nvim_win_get_position(w)[1] == 0 and p.right or p.bottom
             if not vim.tbl_contains(slot.bufs, buf) then
                 table.insert(slot.bufs, buf)
                 slot.cur = #slot.bufs
@@ -407,9 +414,11 @@ function M.yank_to_editor(dedent)
 
     local row = vim.api.nvim_win_get_cursor(target)[1]
     vim.api.nvim_buf_set_lines(buf, row, row, false, lines)
-    -- Go with it: you almost always want to look at what just landed.
-    vim.api.nvim_set_current_win(target)
-    vim.api.nvim_win_set_cursor(target, { row + 1, 0 })
+    -- Stay where you are: you are usually mid-way through picking output, and
+    -- being thrown into the editor costs a trip back. Advance the *target*
+    -- window's cursor past what landed, so a second yank stacks below the
+    -- first instead of above it.
+    pcall(vim.api.nvim_win_set_cursor, target, { row + #lines, 0 })
 
     local name = vim.api.nvim_buf_get_name(buf)
     vim.notify(("%d line%s -> %s"):format(#lines, #lines == 1 and "" or "s",
@@ -449,6 +458,16 @@ end
 -- Keymaps and autocommands for the above. Called from init.lua so that this
 -- file owns its own bindings rather than scattering them.
 function M.setup()
+    -- Full-screen TUIs (Claude Code among them) switch to the terminal's
+    -- alternate screen, which has no scrollback: nvim only ever holds the
+    -- frame currently drawn, so <Esc><Esc> then gg reaches the top of the
+    -- visible frame and no further. Asking Claude Code to stay on the primary
+    -- screen puts its history in this buffer instead, where the usual motions
+    -- work. Set on nvim's own environment, so every shell spawned below
+    -- inherits it while Claude Code launched from a real terminal keeps the
+    -- nicer full-screen UI.
+    vim.env.CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN = "1"
+
     local map = vim.keymap.set
     local aug = vim.api.nvim_create_augroup("user.terminal", { clear = true })
 
