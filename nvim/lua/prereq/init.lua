@@ -42,6 +42,10 @@ M.requirements = {
     { bin = "lua-language-server",  pkg = "lua-language-server",  why = "Lua LSP" },
     { bin = "bash-language-server", pkg = "bash-language-server", why = "shell LSP" },
     { bin = "shellcheck", pkg = "shellcheck", why = "shell diagnostics for bash-language-server" },
+    -- Optional in the sense that the file server falls back to python3's
+    -- http.server, but that has no Range support: images work, video cannot
+    -- seek and some browsers refuse to play it at all.
+    { bin = "miniserve", pkg = "miniserve", why = "serving the working directory (video seeking)" },
 
     -- Homebrew deliberately does not ship a system C compiler: on macOS it
     -- comes from Apple's CLT, and on Linux brew itself requires one already.

@@ -4,6 +4,10 @@
       "rev": "626b8a5b93874c4d05ca25aedec56cfff0b378fb",
       "src": "https://github.com/echasnovski/mini.diff"
     },
+    "mini.files": {
+      "rev": "a249438d15fa6f64085ba83a9d1794d726aaf5ad",
+      "src": "https://github.com/echasnovski/mini.files"
+    },
     "mini.pick": {
       "rev": "04e73ab07222508361095bb6e27621b315e6b9f1",
       "src": "https://github.com/echasnovski/mini.pick"

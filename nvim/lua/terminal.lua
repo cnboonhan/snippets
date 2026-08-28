@@ -94,6 +94,13 @@ end
 -- you were looking at. Sourcing the real activate script rather than poking
 -- PATH keeps the prompt and `deactivate` working normally.
 local function venv_activate(from_buf)
+    -- An explicit :Venv choice wins over whatever is nearest on disk.
+    if vim.env.VIRTUAL_ENV then
+        local chosen = vim.env.VIRTUAL_ENV .. "/bin/activate"
+        if vim.fn.filereadable(chosen) == 1 then
+            return chosen
+        end
+    end
     local name = vim.api.nvim_buf_get_name(from_buf)
     local from = name ~= "" and vim.fn.fnamemodify(name, ":p:h") or vim.fn.getcwd()
     if vim.fn.isdirectory(from) == 0 then
@@ -151,15 +158,6 @@ local function open(p, keep_focus)
         vim.bo[buf].buflisted = false
         p.bufs[p.cur] = buf
 
-        -- gt / gT select shells within this panel, mirroring how they move
-        -- between tabpages elsewhere. Buffer-local, so real tab switching is
-        -- untouched outside terminals. 2gt jumps straight to shell 2.
-        vim.keymap.set("n", "gt", function()
-            local n = vim.v.count
-            if n > 0 then M.select(n) else M.cycle(1) end
-        end, { buffer = buf, desc = "Next / Nth shell in this panel" })
-        vim.keymap.set("n", "gT", function() M.cycle(-1) end,
-            { buffer = buf, desc = "Previous shell in this panel" })
         -- Every new shell gets the same project environment, so all of them
         -- agree despite being separate processes.
         if activate then
@@ -368,12 +366,13 @@ function M.setup()
     map("n", "<leader>]", function() M.cycle(1) end, { desc = "Next shell in this panel" })
     map("n", "<leader>[", function() M.cycle(-1) end, { desc = "Previous shell in this panel" })
 
-    -- Lower case targets the side panel, upper case the bottom one, the same
-    -- shift convention as <leader>t / <leader>T.
-    map({ "n", "x" }, "<leader>e", function() M.send("right") end,
-        { desc = "Send line/selection to side terminal" })
-    map({ "n", "x" }, "<leader>E", function() M.send("bottom") end,
+    -- Sending targets the bottom panel by default: that is where commands are
+    -- run, while the side panel usually holds a REPL or an agent you do not
+    -- want interrupted. Upper case reaches the side panel.
+    map({ "n", "x" }, "<leader>e", function() M.send("bottom") end,
         { desc = "Send line/selection to bottom terminal" })
+    map({ "n", "x" }, "<leader>E", function() M.send("right") end,
+        { desc = "Send line/selection to side terminal" })
     map({ "n", "x" }, "<leader>r", function() M.send_ref("right") end,
         { desc = "Send path:line reference to side terminal" })
     map({ "n", "x" }, "<leader>R", function() M.send_ref("bottom") end,

@@ -31,3 +31,46 @@ map("n", "<leader>1", "<cmd>diffget LOCAL<CR>",  { desc = "Merge: take hunk from
 map("n", "<leader>2", "<cmd>diffget BASE<CR>",   { desc = "Merge: take hunk from BASE" })
 map("n", "<leader>3", "<cmd>diffget REMOTE<CR>", { desc = "Merge: take hunk from REMOTE (theirs)" })
 map("n", "<leader>u", "<cmd>diffupdate<CR>",     { desc = "Merge: refresh the diff" })
+
+-- Blame for the line under the cursor. mini.diff gives signs and hunks but no
+-- blame, and this is the part people actually want day to day: who last
+-- touched this line, when, and why. --porcelain is the stable machine format.
+local function blame_line()
+    if vim.bo.buftype ~= "" then
+        return vim.notify("not a file buffer", vim.log.levels.WARN)
+    end
+    local file = vim.fn.expand("%:p")
+    if file == "" then
+        return vim.notify("buffer has no file", vim.log.levels.WARN)
+    end
+
+    local line = vim.api.nvim_win_get_cursor(0)[1]
+    local res = vim.system({
+        "git", "blame", "-L", ("%d,%d"):format(line, line), "--porcelain", "--", file,
+    }, { cwd = vim.fn.fnamemodify(file, ":h"), text = true }):wait()
+
+    if res.code ~= 0 then
+        local err = (res.stderr or "git blame failed"):gsub("%s+$", "")
+        return vim.notify(err, vim.log.levels.WARN)
+    end
+
+    local out = res.stdout or ""
+    local sha = out:match("^(%x+)") or "?"
+    local author = out:match("\nauthor ([^\n]*)") or "?"
+    local when = tonumber(out:match("\nauthor%-time (%d+)"))
+    local summary = out:match("\nsummary ([^\n]*)") or ""
+
+    -- All-zero sha is git's way of saying the line is not committed yet.
+    if sha:match("^0+$") then
+        return vim.notify(("line %d: not committed yet"):format(line))
+    end
+
+    vim.notify(("%s  %s  %s\n%s"):format(
+        sha:sub(1, 8),
+        author,
+        when and os.date("%Y-%m-%d", when) or "?",
+        summary))
+end
+
+map("n", "<leader>B", blame_line, { desc = "Git blame for this line" })
+vim.api.nvim_create_user_command("Blame", blame_line, { desc = "Git blame for this line" })

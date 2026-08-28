@@ -12,6 +12,10 @@ vim.pack.add({
     -- Git gutter signs and hunk staging. Same author, same lack of deps.
     { src = "https://github.com/echasnovski/mini.diff" },
 
+    -- File explorer: navigate in columns, and do file operations by editing
+    -- the buffer text and confirming. Replaces netrw for browsing.
+    { src = "https://github.com/echasnovski/mini.files" },
+
     -- Build tool for treesitter parsers, not a runtime dependency: it
     -- compiles into site/parser, which nvim finds on its own.
     --   :lua require("nvim-treesitter").install({ "go" })
@@ -25,6 +29,8 @@ vim.pack.add({
 require("mini.pick").setup()
 
 -- Gutter signs against the git index: + added, ~ changed, - deleted.
+require("mini.files").setup()
+
 require("mini.diff").setup({
     view = { style = "sign", signs = { add = "+", change = "~", delete = "-" } },
 })

@@ -1,8 +1,8 @@
 # nvim
 
-Minimal Neovim config: core-only apart from three plugins, installed by the
-built-in `vim.pack`. Python + Lua/shell LSP, fuzzy pickers, git gutter signs,
-OSC 52 clipboard.
+Minimal Neovim config: core-only apart from four plugins, installed by the
+built-in `vim.pack`. Python + Lua/shell LSP, fuzzy pickers, a file explorer, git
+gutter signs, OSC 52 clipboard.
 
 ## Requirements
 
@@ -145,53 +145,60 @@ infocmp -x xterm-ghostty | ssh myserver -- tic -x -
 
 ## Keys
 
-Leader is `Space`. The LSP and navigation keys below are nvim's own defaults
-and are deliberately not redefined.
+Leader is `Space`. Terminal keys work in terminal mode too, so they reach you
+while you are typing in a shell.
 
 | Key | Action |
 | --- | --- |
-| `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
-| `<leader>q` | toggle netrw file explorer (`:Explore` / `:Rexplore`) |
-| `<leader>d` | diagnostics to loclist |
-| `gt` `gT` | next / previous tab (built-in); `2gt` jumps to tab 2 |
-| `<leader>=` | LSP format |
-| `<leader>t` / `<leader>T` | toggle the side / bottom terminal panel |
-| `<C-t>` | new shell in a terminal, otherwise a new tab |
-| `<C-n>` / `<C-p>` | next / previous shell in a terminal, otherwise next / previous tab |
-| `gt` `gT` `2gt` | inside a terminal: next / previous / Nth shell |
-| `<leader>]` / `<leader>[` | next / previous shell in that panel |
-| `<leader>e` / `<leader>E` | send line or selection to the side / bottom terminal |
-| `<leader>r` / `<leader>R` | send a `path:line` reference to the side / bottom terminal |
-| `<leader>i` | view the current file as an image |
-| `<C-h/j/k/l>` | move between windows, including out of the terminal |
-| `<C-x>` | hide the window; on the tab's last window, close the tab. Buffers stay loaded, shells keep running |
+| `<C-h/j/k/l>` | move between windows (also from a terminal) |
+| `<C-n>` / `<C-p>` | next / previous — shell inside a terminal, otherwise tab |
+| `<C-t>` | new — shell inside a terminal, otherwise tab |
+| `<C-x>` | hide the window; on a tab's last window, close the tab |
+| `<Esc>` | clear search highlight |
 | `<Esc><Esc>` | terminal → normal mode |
-
-Two terminal panels -- one down the side, one along the bottom -- and each
-holds as many shells as you like, cycled like tabs within the panel. A row of
-numbers appears along the top of a panel once it has more than one, and they
-are clickable. `gt` / `gT` / `2gt` select shells inside a terminal, mirroring
-how they move between tabpages everywhere else. Leave a
-REPL in one shell and run commands in another. Lower case targets the side
-panel, upper case the bottom, throughout.
-
-Every tab gets its own pair, so a tab is a self-contained workspace. They are
-separate processes, but every new shell sources the project's `.venv`/`venv`
-activate script if it finds one searching upward from the file you were on, so
-they all start in the same environment.
-Closing a tab reaps its two shells rather than leaving them running as hidden
-buffers. The bottom terminal splits the *current* window rather than the whole
-screen, so a side terminal keeps its full height instead of being squashed.
-
-A leader key cannot work in terminal mode -- mapping `<Space>` there would
-hijack every "space then t" you type at the shell -- so `<C-x>` hides either
-one from inside, the same key that hides any other window.
-
-| `<leader>1` `2` `3` | merge: take hunk from LOCAL / BASE / REMOTE |
-| `<leader>u` | merge: refresh the diff |
-| `]h` `[h` | jump to next / previous git hunk |
-| `gh` | git hunk text object (`dgh` reset, `ghgh` select) |
+| `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
+| `<leader>q` | toggle the file explorer (mini.files) |
+| `<leader>t` / `<leader>T` | toggle the side / bottom terminal panel |
+| `<leader>e` / `<leader>E` | send line or selection to the **bottom** / side terminal |
+| `<leader>r` / `<leader>R` | send a `path:line` reference to the **side** / bottom terminal |
+| `<leader>]` / `<leader>[` | next / previous shell in a panel, from anywhere |
+| `<leader>d` | diagnostics to the location list |
+| `<leader>=` | format via the language server |
+| `<leader>B` | git blame for this line |
 | `<leader>o` | toggle the inline git diff overlay |
+| `<leader>1` `2` `3` `u` | mergetool: take LOCAL / BASE / REMOTE, refresh |
+
+Lower case sends commands to the bottom panel and references to the side one,
+on purpose: commands belong with the shell you run things in, references belong
+with the agent reading them.
+
+### Commands
+
+| Command | Action |
+| --- | --- |
+| `:Venv` | browse for a Python environment; `<CR>` enters a folder or selects it |
+| `:Venv <path>` | activate it if it is an environment, otherwise browse from there |
+| `:VenvShow` | report the active environment |
+| `:Serve [port]` | serve the working directory over HTTP on loopback |
+| `:ServeStop` | stop it |
+| `:Blame` | git blame for the current line |
+| `:SessionRestore` | restore this directory's layout |
+| `:PrereqInstall` | brew install any missing external tools |
+
+### Already in nvim or the plugins
+
+Not configured here, but present — worth knowing before installing anything:
+
+| Key | From |
+| --- | --- |
+| `gcc` / `gc` | comment toggle — **built in**, no plugin needed |
+| `]q` `[q` `]l` `[l` `]b` `[b` `]a` `[a` | quickfix, loclist, buffer, arglist navigation |
+| `]d` `[d` `]D` `[D` | next / previous / first / last diagnostic |
+| `]<Space>` `[<Space>` | add an empty line below / above |
+| `gx` | open the file or URL under the cursor |
+| `<C-w>d` | diagnostics for the line in a float |
+| `]h` `[h` `]H` `[H` `gh` `gH` | git hunks: move, first/last, apply, reset (mini.diff) |
+| `]n` `[n` `an` `in` | treesitter node selection (nvim-treesitter) |
 
 ### LSP and code navigation
 
@@ -222,19 +229,19 @@ misleads: `gd` often appears to work while silently only matching text.
 ## Layout
 
 ```
-setup.sh              installer (also: ssh-client HOST, ssh-server)
 init.lua              sets the leader, then requires the modules below
 lua/options.lua       editor options
-lua/keymaps.lua       general keys, window hiding, netrw toggle
+lua/keymaps.lua       general keys, window and tab movement, window hiding
 lua/autocmds.lua      yank highlight, whitespace trim, cursor restore
 lua/reload.lua        instant reload when a file changes on disk
 lua/treesitter.lua    treesitter highlighting
 lua/lsp.lua           diagnostics, completion, per-buffer LSP setup
-lua/plugins.lua       vim.pack and the three plugins, with their keys
-lua/diffs.lua         diff colours and the mergetool keys
-lua/images.lua        image viewing
+lua/plugins.lua       vim.pack and the four plugins, with their keys
+lua/diffs.lua         diff colours, mergetool keys, git blame
 lua/session.lua       per-directory window/tab layout
-lua/terminal.lua      the terminal, send-to-terminal, and its keys
+lua/serve.lua         the HTTP file server
+lua/venv.lua          switching Python environment without restarting
+lua/terminal.lua      the terminal panels, their shells, and their keys
 lua/prereq/           external tool checks (:checkhealth prereq)
 lsp/*.lua             one table per language server
 nvim-pack-lock.json   pinned plugin revisions
@@ -263,11 +270,20 @@ nvim-pack-lock.json   pinned plugin revisions
   atomic writers replace the inode, and a watch on the file itself would then
   be pointing at a dead one. Unsaved edits are never lost: nvim warns with
   `W12` and keeps your version.
-- Opening an image picks a viewer by what the machine can do: on a desktop it
-  hands off to the OS viewer (`open` / `xdg-open`) for real zoom and pan; on a
-  headless box over SSH it draws in the terminal with `timg`, whose kitty
-  escapes travel back down the connection (view only, no zoom). Either way the
-  bytes never enter a buffer. `<leader>i` views again.
-  nvim cannot do this itself: `:terminal` swallows the graphics protocol and
-  `:!` is handed a pipe, so nvim re-renders the escapes as literal text. The
-  terminal path writes bytes straight at the terminal via `nvim_chan_send`.
+- Images and video: nvim cannot draw them, and a terminal render has no zoom
+  or pan. Use `:Serve` and open `http://127.0.0.1:8000` in a browser -- over
+  SSH forward it with `ssh -L 8000:localhost:8000 <host>`. That gives real
+  zoom, pan and video seeking. `miniserve` is preferred over python3's
+  http.server because the latter has no Range support, so video cannot seek.
+- Python environment: `:Venv` browses for one, sets `$VIRTUAL_ENV` and `$PATH`,
+  restarts basedpyright against the new interpreter, and makes new terminal
+  shells source it. No nvim restart needed.
+- Update plugins: `:lua vim.pack.update()`, review the diff, `:w` to apply.
+- Add a parser: `:lua require("nvim-treesitter").install({"go"})`.
+- Buffers reload the instant a file changes on disk -- a git checkout, a
+  formatter, an agent -- using the OS's own notifications (inotify / FSEvents),
+  measured at 2-11 ms. The watch is on the file's *directory*, not the file:
+  atomic writers replace the inode, and a watch on the file itself would then
+  be pointing at a dead one. Unsaved edits are never lost: nvim warns with
+  `W12` and keeps your version.
+
