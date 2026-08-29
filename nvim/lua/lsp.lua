@@ -3,7 +3,7 @@
 local aug = vim.api.nvim_create_augroup("user.lsp", { clear = true })
 
 -- Each server is a table in ~/.config/nvim/lsp/<name>.lua
-vim.lsp.enable({ "basedpyright", "ruff", "lua_ls", "bashls" })
+vim.lsp.enable({ "basedpyright", "ruff" })
 
 vim.diagnostic.config({
     virtual_text = { prefix = "●" },

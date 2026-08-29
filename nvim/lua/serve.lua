@@ -5,7 +5,7 @@ local M = {}
 
 -- Default port; override per-session with vim.g.serve_port, or per-invocation
 -- with :Serve <port>.
-local DEFAULT_PORT = 8000
+local DEFAULT_PORT = 3588
 local proc, url
 
 -- Bound to loopback only: this serves every file under the working directory,

@@ -244,47 +244,6 @@ function M.cycle(delta, name)
     show_current(p)
 end
 
--- Take ownership of terminal windows this module did not create -- the ones a
--- restored session brings back, whose shells nvim restarts for us. Without
--- this they would work as windows but be invisible to the panel keys, and
--- the send keys would open a second terminal beside them.
-function M.adopt()
-    for _, w in ipairs(vim.api.nvim_list_wins()) do
-        local buf = vim.api.nvim_win_get_buf(w)
-        if vim.bo[buf].buftype == "terminal" then
-            local p = panels_for(vim.api.nvim_win_get_tabpage(w))
-            -- Which panel this was, by where the window sits. Row, not width:
-            -- botright vsplit puts a side panel at row 0 spanning the full
-            -- height, while belowright split always leaves an editor window
-            -- above a bottom panel. Width cannot tell them apart, because a
-            -- bottom panel is squeezed into the editor's column whenever the
-            -- side panel is open too, making it narrower than the screen as
-            -- well -- which filed it as a side shell and left the bottom panel
-            -- looking empty, so sending to it spawned a second shell.
-            local slot = vim.api.nvim_win_get_position(w)[1] == 0 and p.right or p.bottom
-            if not vim.tbl_contains(slot.bufs, buf) then
-                table.insert(slot.bufs, buf)
-                slot.cur = #slot.bufs
-                slot.win = w
-                vim.bo[buf].buflisted = false
-
-                -- nvim restarted this shell itself, so it never went through
-                -- open() and never got the project environment. Source it now,
-                -- deferred so the shell is up and reading input.
-                local script = venv_activate(buf)
-                if script then
-                    vim.defer_fn(function()
-                        if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].channel ~= 0 then
-                            vim.fn.chansend(vim.bo[buf].channel,
-                                ("source %s\n"):format(vim.fn.shellescape(script)))
-                        end
-                    end, 300)
-                end
-            end
-        end
-    end
-end
-
 -- A closed tab's shells would otherwise linger as hidden buffers with live
 -- processes, so reap them along with the tab.
 local function reap_closed_tabs()
@@ -480,6 +439,29 @@ function M.setup()
 
     local map = vim.keymap.set
     local aug = vim.api.nvim_create_augroup("user.terminal", { clear = true })
+
+    -- Both panels are part of the default layout rather than something you
+    -- open: a side shell for a REPL or an agent, a bottom one for commands.
+    -- panel_ready is the same "open it, keep focus here" the send keys use, so
+    -- the cursor stays in the editor and no keystroke lands in a shell.
+    vim.api.nvim_create_autocmd("VimEnter", {
+        group = aug,
+        once = true,
+        desc = "Open the side and bottom panels",
+        callback = function()
+            -- Headless has no window to split, and `nvim -d` (the git
+            -- mergetool included) wants its diff layout left alone.
+            if #vim.api.nvim_list_uis() == 0 or vim.o.diff then
+                return
+            end
+            -- Side first: it splits the whole screen, while the bottom one
+            -- splits only the editor window's space, which is what keeps the
+            -- side panel full height.
+            panel_ready("right")
+            panel_ready("bottom")
+            focus_editor()
+        end,
+    })
 
     -- These act on the panel the cursor is in, or the side panel otherwise.
     map("n", "<leader>]", function() M.cycle(1) end, { desc = "Next shell in this panel" })
