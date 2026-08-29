@@ -1,5 +1,5 @@
 -- ~/.config/nvim/init.lua
--- Minimal Neovim. Core-only except three plugins, installed by the built-in
+-- Minimal Neovim. Core-only except four plugins, installed by the built-in
 -- vim.pack. Each require below is one self-contained concern.
 
 -- Leader must be set before any keymap that uses <leader>.

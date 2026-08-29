@@ -1,4 +1,4 @@
--- The three plugins, installed by the built-in vim.pack.
+-- The four plugins, installed by the built-in vim.pack.
 
 local map = vim.keymap.set
 
@@ -28,9 +28,9 @@ vim.pack.add({
 
 require("mini.pick").setup()
 
--- Gutter signs against the git index: + added, ~ changed, - deleted.
 require("mini.files").setup()
 
+-- Gutter signs against the git index: + added, ~ changed, - deleted.
 require("mini.diff").setup({
     view = { style = "sign", signs = { add = "+", change = "~", delete = "-" } },
 })

@@ -10,13 +10,28 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NVIM_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nvim"
 ITEMS=(init.lua lsp lua nvim-pack-lock.json)
-FORMULAE=(neovim ripgrep tree-sitter-cli basedpyright ruff
-          lua-language-server bash-language-server shellcheck)
 PARSERS='{"python"}'
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 info() { printf '   %s\n' "$*"; }
 die()  { printf '\n!! %s\n' "$*" >&2; exit 1; }
+
+# The config's own requirement list decides what is needed, so a new tool is
+# added in one place rather than two that drift apart -- which is how the file
+# server once ended up missing from this script. It reports what is *missing*
+# rather than everything it wants, so a tool the system already provides is
+# left alone: git and curl exist on any machine that can run brew, and
+# installing Homebrew's copies over them is pure waste. This is the same list
+# :PrereqInstall works from. neovim has to be installed first, since it is what
+# answers.
+missing_formulae() {
+    nvim --headless --clean --cmd "set runtimepath^=$REPO" -c 'lua
+        local out = {}
+        for _, r in ipairs(require("prereq").missing()) do
+            if r.pkg then out[#out + 1] = r.pkg end
+        end
+        io.write(table.concat(out, " "))' -c 'qa!' 2>/dev/null
+}
 
 find_brew() {
     command -v brew && return 0
@@ -83,17 +98,44 @@ main() {
     fi
 
     step "Packages"
+    if "$brew" list --formula neovim >/dev/null 2>&1; then
+        info "neovim already installed"
+    else
+        info "installing neovim"
+        "$brew" install neovim
+    fi
     local missing=()
-    for f in "${FORMULAE[@]}"; do
-        "$brew" list --formula "$f" >/dev/null 2>&1 || missing+=("$f")
-    done
+    read -ra missing <<<"$(missing_formulae)"
     if [ ${#missing[@]} -eq 0 ]; then
-        info "all ${#FORMULAE[@]} formulae already installed"
+        info "every tool the config needs is already on PATH"
     else
         info "installing: ${missing[*]}"
         "$brew" install "${missing[@]}"
+        # A formula that is installed but unlinked stays off PATH: `install`
+        # only warns about it. Linking is a no-op for anything just installed.
+        "$brew" link "${missing[@]}" >/dev/null 2>&1 || true
     fi
     command -v cc >/dev/null || info "WARNING: no C compiler; treesitter parsers cannot build"
+
+    step "Claude Code on the primary screen"
+    # It draws into the terminal's alternate screen, which has no scrollback, so
+    # a session cannot be scrolled back through -- in a panel or anywhere else.
+    local rcs
+    if [ "$(uname -s)" = "Darwin" ]; then
+        rcs="$HOME/.zshrc"
+    else
+        # Ubuntu's rc files do not chain: login shells read the first,
+        # interactive non-login ones (a tmux pane) only the second.
+        rcs="$HOME/.profile $HOME/.bashrc"
+    fi
+    for rc in $rcs; do
+        if grep -q CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN "$rc" 2>/dev/null; then
+            info "$(basename "$rc") already sets it"
+        else
+            printf '\n# Claude Code renders into the alternate screen, which has no\n# scrollback; staying on the primary screen makes its history scrollable.\nexport CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1\n' >> "$rc"
+            info "appended to $(basename "$rc")"
+        fi
+    done
 
     step "Config -> $NVIM_DIR"
     local same=1

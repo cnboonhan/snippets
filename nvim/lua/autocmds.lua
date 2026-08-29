@@ -2,8 +2,6 @@
 
 local aug = vim.api.nvim_create_augroup("user.autocmds", { clear = true })
 
-local aug = vim.api.nvim_create_augroup("user", { clear = true })
-
 vim.api.nvim_create_autocmd("TextYankPost", {
     group = aug,
     desc = "Briefly highlight yanked text",

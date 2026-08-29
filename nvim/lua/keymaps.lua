@@ -1,11 +1,23 @@
 -- General keymaps. LSP keys are nvim's own defaults and are not redefined.
 
-local map = vim.keymap.set
-
 -- nvim 0.11+ already ships LSP keymaps: K (hover), grn (rename),
 -- gra (code action), grr (references), gri (implementation),
 -- gO (symbols), and ]d / [d to walk diagnostics. Don't redefine them.
 local map = vim.keymap.set
+
+-- Terminal mode has to leave insert before a window or tab command will run,
+-- and the command has to wait for that to take effect -- hence the schedule.
+-- Every key below that works from inside a shell goes through this.
+local function by_context(in_terminal, elsewhere)
+    return function()
+        if vim.bo.buftype == "terminal" then
+            vim.cmd("stopinsert")
+            vim.schedule(in_terminal)
+        else
+            (elsewhere or in_terminal)()
+        end
+    end
+end
 
 map("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlight" })
 
@@ -13,14 +25,7 @@ map("n", "<Esc>", "<cmd>nohlsearch<CR>", { desc = "Clear search highlight" })
 -- Ctrl+letter is a real control code (0x08 and friends), so unlike <C-,> these
 -- actually reach nvim from inside a shell. They stop at the edges.
 local function nav(dir)
-    return function()
-        if vim.bo.buftype == "terminal" then
-            vim.cmd("stopinsert")
-            vim.schedule(function() vim.cmd("wincmd " .. dir) end)
-        else
-            vim.cmd("wincmd " .. dir)
-        end
-    end
+    return by_context(function() vim.cmd("wincmd " .. dir) end)
 end
 
 map({ "n", "t" }, "<C-h>", nav("h"), { desc = "Window left" })
@@ -45,11 +50,7 @@ local function hide_window()
     end
 end
 
-map("n", "<C-x>", hide_window, { desc = "Hide current window" })
-map("t", "<C-x>", function()
-    vim.cmd("stopinsert")
-    vim.schedule(hide_window)
-end, { desc = "Hide current window (from terminal mode)" })
+map({ "n", "t" }, "<C-x>", by_context(hide_window), { desc = "Hide current window" })
 
 -- Get out of a :terminal buffer
 map("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Terminal: normal mode" })
@@ -67,8 +68,6 @@ map("n", "<leader>q", function()
 end, { desc = "Toggle file explorer" })
 map("n", "<leader>d", vim.diagnostic.setloclist, { desc = "Diagnostics to loclist" })
 
-
-
 -- Tabs. Switching is already built in and not redefined: gt / gT step through
 -- them and {count}gt jumps straight to one (2gt = second tab). <leader>1..3
 -- would be the obvious jump keys but they are the mergetool diffget keys.
@@ -78,17 +77,12 @@ map("n", "<leader>d", vim.diagnostic.setloclist, { desc = "Diagnostics to loclis
 -- arrive from inside a shell -- unlike <C-,> or <C-S-p>, which need the kitty
 -- keyboard protocol and never showed up.
 local function at_level(shell_fn, tab_cmd)
-    return function()
-        if vim.bo.buftype == "terminal" then
-            vim.cmd("stopinsert")
-            vim.schedule(function()
-                shell_fn(require("terminal"))
-                vim.cmd("startinsert") -- ready to type in whatever we landed on
-            end)
-        else
-            pcall(vim.cmd, tab_cmd)
-        end
-    end
+    return by_context(function()
+        shell_fn(require("terminal"))
+        vim.cmd("startinsert") -- ready to type in whatever we landed on
+    end, function()
+        pcall(vim.cmd, tab_cmd)
+    end)
 end
 
 map({ "n", "t" }, "<C-n>", at_level(function(t) t.cycle(1) end, "tabnext"),

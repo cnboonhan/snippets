@@ -14,6 +14,13 @@ gutter signs, OSC 52 clipboard.
 - **A terminal that implements OSC 52** — Ghostty, Kitty, WezTerm, iTerm2.
   **macOS Terminal.app does not**, and yanks there silently go nowhere.
 
+Homebrew is the only package manager involved. Every external tool is a brew
+formula on both platforms — including the ones that are really node or Python
+programs, `basedpyright`, `bash-language-server` and `copyparty`, whose
+runtimes brew brings along — so there is no npm, pip or cargo anywhere. The two
+things brew cannot supply are itself and the C compiler; plugins come from git
+via `vim.pack`, pinned in `nvim-pack-lock.json`.
+
 ## Setup
 
 ```sh
@@ -21,10 +28,17 @@ cd nvim && ./setup.sh
 ```
 
 Idempotent — re-running reports what is already done rather than repeating it.
-It installs the Homebrew packages, copies the config to `~/.config/nvim`
-(backing up any existing one), points git at nvim as its merge tool, installs
-the plugins and builds the treesitter parsers, then prints anything still
-missing.
+It installs whatever is missing, copies the config to `~/.config/nvim` (backing
+up any existing one), points git at nvim as its merge tool, keeps Claude Code
+off the alternate screen, installs the plugins and builds the treesitter
+parsers, then prints anything still missing.
+
+It asks the config itself which tools are needed — the same list behind
+`:checkhealth prereq` and `:PrereqInstall` — so a new tool is added in one
+place rather than two that drift apart. And it installs only what is *missing
+from `PATH`*, not everything the list names: `git` and `curl` are on any
+machine that can run brew already, and installing Homebrew's copies over the
+system ones would be waste.
 
 For use over SSH, two more:
 
@@ -39,8 +53,8 @@ why, for doing it by hand or auditing it.
 
 ## Configuration outside nvim
 
-Everything this config assumes but cannot set for itself. `setup.sh`
-applies the git and Homebrew entries; the SSH and Ghostty ones need the
+Everything this config assumes but cannot set for itself. `setup.sh` applies
+the git, Homebrew and Claude Code entries; the SSH and Ghostty ones need the
 subcommands above, or the manual steps here.
 
 | File | Machine | Purpose |
@@ -194,7 +208,6 @@ while you are typing in a shell.
 | `<Esc><Esc>` | terminal → normal mode, for scrolling and copying output |
 | `<leader>f` `g` `b` `h` | fuzzy: files, live grep, buffers, help |
 | `<leader>q` | toggle the file explorer (mini.files) |
-| `<leader>t` / `<leader>T` | toggle the side / bottom terminal panel |
 | `<leader>e` / `<leader>E` | send line or selection to the **bottom** / side terminal |
 | `<leader>r` / `<leader>R` | send a `path:line` reference to the **side** / bottom terminal |
 | `<leader>y` / `<leader>Y` | pull the highlighted text into the editor buffer — dedented / verbatim |
@@ -208,6 +221,15 @@ while you are typing in a shell.
 Lower case sends commands to the bottom panel and references to the side one,
 on purpose: commands belong with the shell you run things in, references belong
 with the agent reading them.
+
+A closed panel absorbs the first press: `<leader>e` and `<leader>r` open it and
+send nothing, and the press after that delivers. So the send keys double as
+"give me a terminal", which is why there is no `<leader>t`. Focus stays in the
+editor as the panel opens, so pressing again sends straight away; `<C-l>`
+moves into the shell instead. Nothing is fired at a shell that has only just
+started, and a visual selection is not consumed — the split ends visual mode,
+but `gv` reselects it for the second press. `<C-x>` hides a panel, the same key
+that hides any other window.
 
 `<leader>y` is the return path: `<Esc><Esc>` out of a shell, `V` to highlight
 output, then `<leader>y` drops it into the editor below its cursor. Focus stays
@@ -243,6 +265,12 @@ screen](#claude-code-on-the-primary-screen).
 | `:SessionRestore` | restore this directory's layout |
 | `:PrereqInstall` | brew install any missing external tools |
 | `:checkhealth prereq` | report which external tools are missing |
+
+`:Serve` with no argument starts at port 8000 and scans upward for a free one,
+so several nvim instances do not collide. Set `vim.g.serve_port` to start that
+scan somewhere else — useful when a fixed port is already forwarded over SSH.
+An explicit `:Serve <port>` uses exactly that port and says so if it is taken,
+rather than quietly serving somewhere you did not ask for.
 
 ### Already in nvim or the plugins
 
@@ -331,11 +359,20 @@ nvim-pack-lock.json   pinned plugin revisions
   atomic writers replace the inode, and a watch on the file itself would then
   be pointing at a dead one. Unsaved edits are never lost: nvim warns with
   `W12` and keeps your version.
-- Images and video: nvim cannot draw them, and a terminal render has no zoom
-  or pan. Use `:Serve` and open `http://127.0.0.1:8000` in a browser — over
-  SSH forward it with `ssh -L 8000:localhost:8000 <host>`. That gives real
-  zoom, pan and video seeking. `miniserve` is preferred over python3's
-  http.server because the latter has no Range support, so video cannot seek.
+- Images, video and PDFs: nvim cannot draw them, and a terminal render has no
+  zoom or pan. Use `:Serve` and open `http://127.0.0.1:8000` in a browser —
+  over SSH forward it with `ssh -L 8000:localhost:8000 <host>`. That gives real
+  zoom, pan, video seeking and a PDF viewer. The server is `copyparty`, which
+  *renders* what it serves instead of leaving the browser to guess from a MIME
+  type: source files and markdown open in its own viewer, PDFs inline, media in
+  a player, all over Range requests. A plain static server cannot manage this —
+  a browser downloads whatever it has no viewer for, which is every `.md`,
+  `.lua` and `.yaml`, and under miniserve every PDF too, since it marks those
+  `Content-Disposition: attachment`. python3's `http.server` is the fallback
+  when copyparty is missing; it downloads everything and has no Range support,
+  so video cannot seek. copyparty's thumbnail and index cache is pointed at
+  `stdpath("cache")/copyparty`, so it leaves no `.hist` folder inside the
+  project being served.
 - Python environment: `:Venv` browses for one, sets `$VIRTUAL_ENV` and `$PATH`,
   restarts basedpyright against the new interpreter, sources it in terminals
   that are already open, and makes new shells source it too. No nvim restart
@@ -351,5 +388,14 @@ nvim-pack-lock.json   pinned plugin revisions
   alternate screen has no scrollback. For Claude Code there is a variable that
   fixes it, set on both machines — see [Claude Code on the primary
   screen](#claude-code-on-the-primary-screen).
+- Clipboard: yanks go out over OSC 52, so they reach the local clipboard from
+  any machine with nothing installed at either end. Pasting deliberately does
+  *not* use it. Reading a clipboard over OSC 52 means asking the terminal and
+  waiting for an answer — nvim blocks a second, prints "Waiting for OSC 52
+  response ... Ctrl-C to interrupt", then waits nine more — and Ghostty
+  defaults to `clipboard-read = ask`, so every `p` sat behind a prompt. `p`
+  answers from nvim's own register instead: instant, and it cannot hang. Text
+  copied in *another* application comes in through the terminal's own paste
+  (Cmd/Ctrl-V), which arrives as a bracketed paste and works in any mode.
 - Update plugins: `:lua vim.pack.update()`, review the diff, `:w` to apply.
 - Add a parser: `:lua require("nvim-treesitter").install({"go"})`.

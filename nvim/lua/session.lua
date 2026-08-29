@@ -43,7 +43,7 @@ function M.restore()
     -- 'terminal' is in the default sessionoptions, so nvim brings terminal
     -- windows back and restarts their shells. Hand them to the terminal module
     -- so the panel keys manage them rather than ignoring them.
-    pcall(function() require("terminal").adopt() end)
+    pcall(require("terminal").adopt)
     return true
 end
 

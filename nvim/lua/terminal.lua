@@ -115,17 +115,21 @@ local function venv_activate(from_buf)
     return vim.fn.filereadable(script) == 1 and script or nil
 end
 
+-- The editor pane: the first window in this tab holding a real file.
+local function editor_win()
+    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if vim.bo[vim.api.nvim_win_get_buf(w)].buftype == "" then
+            return w
+        end
+    end
+end
+
 -- Move out of a terminal window, if we are in one, so a new split lands beside
 -- the code rather than nested inside another terminal.
 local function focus_editor()
-    if vim.bo.buftype ~= "terminal" then
-        return
-    end
-    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        if vim.bo[vim.api.nvim_win_get_buf(w)].buftype ~= "terminal" then
-            vim.api.nvim_set_current_win(w)
-            return
-        end
+    local w = vim.bo.buftype == "terminal" and editor_win()
+    if w then
+        vim.api.nvim_set_current_win(w)
     end
 end
 
@@ -181,6 +185,17 @@ local function open(p, keep_focus)
     end
 end
 
+-- Put the panel's current shell on screen, opening the panel if it is closed.
+local function show_current(p)
+    if visible(p) then
+        vim.api.nvim_win_set_buf(p.win, p.bufs[p.cur])
+        set_winbar(p)
+        follow(p)
+    else
+        open(p, false)
+    end
+end
+
 -- Show a specific shell by its winbar number.
 function M.select(n, name)
     local p = panel(name or panel_here())
@@ -189,13 +204,7 @@ function M.select(n, name)
         return
     end
     p.cur = n
-    if visible(p) then
-        vim.api.nvim_win_set_buf(p.win, p.bufs[p.cur])
-        set_winbar(p)
-        follow(p)
-    else
-        open(p, false)
-    end
+    show_current(p)
 end
 
 -- Clicking a number in the winbar selects that shell. The window under the
@@ -210,24 +219,14 @@ function _G.NvimTerminalClick(index)
     M.select(index)
 end
 
--- Each panel toggles independently of the other.
-function M.toggle(name)
-    local p = panel(name)
-    prune(p)
-    if visible(p) then
-        vim.api.nvim_win_close(p.win, false) -- hide; the shells keep running
-        p.win = nil
-        return
-    end
-    open(p, false)
-end
-
 -- Add another shell to a panel and switch to it.
 function M.new(name)
     local p = panel(name or panel_here())
     prune(p)
     p.cur = #p.bufs + 1 -- nothing at this index yet, so open() spawns one
-    if p.win and vim.api.nvim_win_is_valid(p.win) then
+    -- open() always splits, so the existing window has to go or the panel ends
+    -- up shown twice.
+    if visible(p) then
         pcall(vim.api.nvim_win_close, p.win, false)
         p.win = nil
     end
@@ -242,19 +241,13 @@ function M.cycle(delta, name)
         return vim.notify("only one shell in this panel", vim.log.levels.INFO)
     end
     p.cur = ((p.cur - 1 + delta) % #p.bufs) + 1
-    if visible(p) then
-        vim.api.nvim_win_set_buf(p.win, p.bufs[p.cur])
-        set_winbar(p)
-        follow(p)
-    else
-        open(p, false)
-    end
+    show_current(p)
 end
 
 -- Take ownership of terminal windows this module did not create -- the ones a
 -- restored session brings back, whose shells nvim restarts for us. Without
 -- this they would work as windows but be invisible to the panel keys, and
--- <leader>t would open a second terminal beside them.
+-- the send keys would open a second terminal beside them.
 function M.adopt()
     for _, w in ipairs(vim.api.nvim_list_wins()) do
         local buf = vim.api.nvim_win_get_buf(w)
@@ -298,7 +291,7 @@ local function reap_closed_tabs()
     for tab, pair in pairs(per_tab) do
         if not vim.api.nvim_tabpage_is_valid(tab) then
             for _, p in pairs(pair) do
-                for _, b in ipairs(p.bufs or {}) do
+                for _, b in ipairs(p.bufs) do
                     if vim.api.nvim_buf_is_valid(b) then
                         pcall(vim.api.nvim_buf_delete, b, { force = true })
                     end
@@ -309,13 +302,22 @@ local function reap_closed_tabs()
     end
 end
 
--- Bring the named panel up if needed, then hand its current shell raw bytes.
-local function deliver(name, text)
+-- The panel to send to, or nil when this press only opened it. A closed panel
+-- absorbs the first press: it opens and nothing is sent, which is what makes
+-- the send keys double as "give me a terminal" -- there is no separate key for
+-- that -- and keeps a line from being fired at a shell that has only just
+-- started. The press after this one delivers.
+local function panel_ready(name)
     local p = panel(name)
     prune(p)
-    if not visible(p) then
-        open(p, true)
+    if visible(p) then
+        return p
     end
+    open(p, true) -- focus stays here, so the next press can send
+end
+
+-- Hand the panel's current shell raw bytes.
+local function deliver(p, text)
     local buf = p.bufs[p.cur]
     if not (buf and vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].channel ~= 0) then
         vim.notify("terminal shell is not running", vim.log.levels.WARN)
@@ -325,11 +327,17 @@ local function deliver(name, text)
     vim.schedule(function() follow(p) end)
 end
 
+-- Characterwise, linewise or blockwise visual mode.
+local function visual_mode()
+    local mode = vim.fn.mode()
+    return (mode == "v" or mode == "V" or mode == "\22") and mode or nil
+end
+
 -- The visual selection, or the current line when not in visual mode. Must run
 -- before any window juggling, which would drop visual mode.
 local function payload()
-    local mode = vim.fn.mode()
-    if mode == "v" or mode == "V" or mode == "\22" then
+    local mode = visual_mode()
+    if mode then
         local lines = vim.fn.getregion(vim.fn.getpos("v"), vim.fn.getpos("."), { type = mode })
         vim.api.nvim_feedkeys(vim.keycode("<Esc>"), "nx", false)
         return lines
@@ -338,8 +346,15 @@ local function payload()
 end
 
 function M.send(name)
+    -- Checked before payload(), so a first press does not consume the
+    -- selection. Splitting a window ends visual mode either way, but the '< '>
+    -- marks survive, so gv reselects and the second press sends it.
+    local p = panel_ready(name)
+    if not p then
+        return
+    end
     -- The trailing newline is what makes the shell execute the last line.
-    deliver(name, table.concat(payload(), "\n") .. "\n")
+    deliver(p, table.concat(payload(), "\n") .. "\n")
 end
 
 -- The same gesture, but sending a `path:line` reference instead of the code,
@@ -354,10 +369,13 @@ function M.send_ref(name)
     if path == "" then
         return vim.notify("buffer has no file name", vim.log.levels.WARN)
     end
+    local p = panel_ready(name)
+    if not p then
+        return
+    end
 
-    local mode = vim.fn.mode()
     local ref
-    if mode == "v" or mode == "V" or mode == "\22" then
+    if visual_mode() then
         local first, last = vim.fn.getpos("v")[2], vim.fn.getpos(".")[2]
         if first > last then
             first, last = last, first
@@ -369,7 +387,7 @@ function M.send_ref(name)
         ref = ("%s:%d"):format(path, vim.api.nvim_win_get_cursor(0)[1])
     end
 
-    deliver(name, ref .. " ")
+    deliver(p, ref .. " ")
 end
 
 -- The reverse of send: take what you have highlighted -- typically terminal
@@ -394,15 +412,7 @@ function M.yank_to_editor(dedent)
         end
     end
 
-    -- The editor pane: a real file window in this tab, not a terminal.
-    local target
-    for _, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-        local b = vim.api.nvim_win_get_buf(w)
-        if vim.bo[b].buftype == "" then
-            target = w
-            break
-        end
-    end
+    local target = editor_win()
     if not target then
         return vim.notify("no editor window in this tab", vim.log.levels.WARN)
     end
@@ -437,7 +447,7 @@ function M.activate_in_open_shells(script)
     local sourced, busy = 0, 0
     for _, pair in pairs(per_tab) do
         for _, p in pairs(pair) do
-            for _, buf in ipairs(p.bufs or {}) do
+            for _, buf in ipairs(p.bufs) do
                 if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].channel ~= 0 then
                     local pid = vim.fn.jobpid(vim.bo[buf].channel)
                     local kids = vim.system({ "pgrep", "-P", tostring(pid) },
@@ -471,17 +481,14 @@ function M.setup()
     local map = vim.keymap.set
     local aug = vim.api.nvim_create_augroup("user.terminal", { clear = true })
 
-    map("n", "<leader>t", function() M.toggle("right") end, { desc = "Toggle side terminal" })
-    map("n", "<leader>T", function() M.toggle("bottom") end, { desc = "Toggle bottom terminal" })
-
-
     -- These act on the panel the cursor is in, or the side panel otherwise.
     map("n", "<leader>]", function() M.cycle(1) end, { desc = "Next shell in this panel" })
     map("n", "<leader>[", function() M.cycle(-1) end, { desc = "Previous shell in this panel" })
 
     -- Sending targets the bottom panel by default: that is where commands are
     -- run, while the side panel usually holds a REPL or an agent you do not
-    -- want interrupted. Upper case reaches the side panel.
+    -- want interrupted. Upper case reaches the side panel. These also open a
+    -- panel that is closed, which is why there is no separate key for that.
     map({ "n", "x" }, "<leader>e", function() M.send("bottom") end,
         { desc = "Send line/selection to bottom terminal" })
     map({ "n", "x" }, "<leader>E", function() M.send("right") end,

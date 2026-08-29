@@ -36,16 +36,28 @@ local function free_port(from)
     end
 end
 
--- miniserve handles Range requests, so video seeks and browsers will play it;
--- python3's http.server does not, but it is always there.
+-- copyparty *renders* what it serves rather than handing it to the browser to
+-- guess at: source files and markdown through its own viewer, PDFs inline,
+-- images and video in a player, all with Range requests so seeking works. A
+-- plain static server can only send a MIME type, and the browser downloads
+-- anything it has no viewer for -- .md, .lua, .yaml and, in miniserve's case,
+-- every PDF.
 local function command_for(root, port)
-    if vim.fn.executable("miniserve") == 1 then
-        return { "miniserve", "--interfaces", HOST, "--port", tostring(port), root }, "miniserve"
+    if vim.fn.executable("copyparty") == 1 then
+        return {
+            "copyparty", "-i", HOST, "-p", tostring(port),
+            "-v", root .. "::r", -- a single read-only volume at the root
+            -- Thumbnails and its index would otherwise land in a .hist folder
+            -- inside whatever project is being served.
+            "--hist", vim.fn.stdpath("cache") .. "/copyparty",
+            "--no-crt", -- no TLS here: loopback only
+            "-q",
+        }, "copyparty"
     end
     return {
         "python3", "-m", "http.server", tostring(port),
         "--bind", HOST, "--directory", root,
-    }, "python3 (no video seeking: brew install miniserve)"
+    }, "python3 (downloads instead of rendering, no video seeking: brew install copyparty)"
 end
 
 -- With no argument, take vim.g.serve_port (or the default) and scan upward for
@@ -98,10 +110,6 @@ function M.stop()
     end
     proc:kill("sigterm")
     proc, url = nil, nil
-end
-
-function M.url()
-    return url
 end
 
 function M.setup()

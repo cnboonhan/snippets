@@ -10,6 +10,16 @@ local M = {}
 -- the project, where the upward search cannot find it.
 local STORE = vim.fn.stdpath("state") .. "/venvs"
 
+-- What makes a directory an environment, asked in five places below.
+local function is_venv(dir)
+    return vim.fn.filereadable(dir .. "/bin/python") == 1
+end
+
+-- Absolute, ~ and $VAR expanded, no trailing slash.
+local function abs(path)
+    return (vim.fn.fnamemodify(vim.fn.expand(path), ":p"):gsub("/$", ""))
+end
+
 local function store_path()
     return ("%s/%s"):format(STORE, (vim.fn.getcwd():gsub("/", "%%")))
 end
@@ -25,7 +35,7 @@ local function recall()
         return nil
     end
     local dir = (vim.fn.readfile(f)[1] or ""):gsub("%s+$", "")
-    if dir ~= "" and vim.fn.filereadable(dir .. "/bin/python") == 1 then
+    if dir ~= "" and is_venv(dir) then
         return dir
     end
     -- Gone or moved: forget it rather than failing on every startup.
@@ -41,7 +51,7 @@ local function nearest_venv()
     end
     for _, d in ipairs(vim.fs.find({ ".venv", "venv", ".virtualenv" },
         { upward = true, type = "directory", path = from, limit = math.huge })) do
-        if vim.fn.filereadable(d .. "/bin/python") == 1 then
+        if is_venv(d) then
             return d
         end
     end
@@ -83,10 +93,9 @@ local function apply(dir)
 end
 
 function M.use(dir)
-    dir = vim.fn.fnamemodify(vim.fn.expand(dir), ":p"):gsub("/$", "")
-    local python = dir .. "/bin/python"
-    if vim.fn.filereadable(python) == 0 then
-        return vim.notify("no interpreter at " .. python, vim.log.levels.WARN)
+    dir = abs(dir)
+    if not is_venv(dir) then
+        return vim.notify("no interpreter at " .. dir .. "/bin/python", vim.log.levels.WARN)
     end
 
     apply(dir)
@@ -104,10 +113,6 @@ function M.use(dir)
             :format(busy, busy == 1 and "" or "s")
     end
     vim.notify(msg)
-end
-
-function M.current()
-    return vim.env.VIRTUAL_ENV
 end
 
 -- Browsing is the interface, because an environment may live anywhere: a
@@ -141,7 +146,7 @@ local function choose_or_enter()
         return vim.notify("pick a directory containing bin/python", vim.log.levels.WARN)
     end
 
-    if vim.fn.filereadable(entry.path .. "/bin/python") == 1 then
+    if is_venv(entry.path) then
         files.close()
         return vim.schedule(function() M.use(entry.path) end)
     end
@@ -149,8 +154,6 @@ local function choose_or_enter()
     -- Not an environment, so treat <CR> as "go in", same as l.
     files.go_in()
 end
-
-M.choose_or_enter = choose_or_enter
 
 -- Reapply the remembered environment for this directory. Never overrides one
 -- the launching shell already activated: that is a deliberate choice too.
@@ -177,8 +180,8 @@ function M.setup()
         -- One argument, two meanings, decided by what is actually there: an
         -- environment gets activated, any other directory becomes the place to
         -- start browsing. Saves walking up from a nested project with h.
-        local path = vim.fn.fnamemodify(vim.fn.expand(opts.args), ":p"):gsub("/$", "")
-        if vim.fn.filereadable(path .. "/bin/python") == 1 then
+        local path = abs(opts.args)
+        if is_venv(path) then
             return M.use(path)
         end
         if vim.fn.isdirectory(path) == 1 then
@@ -218,7 +221,7 @@ function M.setup()
     })
 
     vim.api.nvim_create_user_command("VenvShow", function()
-        vim.notify("venv: " .. (M.current() or "none (project default)"))
+        vim.notify("venv: " .. (vim.env.VIRTUAL_ENV or "none (project default)"))
     end, { desc = "Show the active Python environment" })
 end
 
