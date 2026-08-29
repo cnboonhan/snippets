@@ -1,35 +1,41 @@
 # nvim
 
-Minimal Neovim: core-only apart from four plugins. Python LSP, fuzzy pickers,
-file explorer, git signs, terminal panels, OSC 52 clipboard.
+Minimal Neovim: core-only apart from four plugins, installed by the built-in
+`vim.pack`. Python + Lua/shell LSP, fuzzy pickers, file explorer, git signs,
+terminal panels, OSC 52 clipboard.
 
 ## Requirements
 
 | Need | Why |
 | --- | --- |
-| **Neovim 0.12+** | Ubuntu's apt ships 0.9 — use Homebrew |
-| **Homebrew** | the only package manager used, macOS and Linux alike |
-| **A C compiler** | treesitter parsers build from source |
-| **A terminal with OSC 52** | Ghostty, Kitty, WezTerm, iTerm2. **Terminal.app has none** — yanks go nowhere |
+| **Neovim 0.12+** | `vim.pack`, `vim.lsp.enable`, `statuscolumn`, `winborder`. Ubuntu's apt ships 0.9 — use Homebrew. |
+| **Homebrew** | The only package manager used, macOS and Linux alike. No npm, pip or cargo. |
+| **A C compiler** | Treesitter parsers build from source. `xcode-select --install` / `build-essential`. |
+| **A terminal with OSC 52** | Ghostty, Kitty, WezTerm, iTerm2. **Terminal.app has none** — yanks go nowhere. |
 
 ## Setup
 
 ```sh
-cd nvim && ./setup.sh
+cd nvim && ./setup.sh          # install everything missing
 ```
 
-Idempotent, and the only installer: `:checkhealth prereq` reports what is
-missing, `setup.sh` fixes it.
+Takes no arguments: every concern is a check and a fix, and a check that
+passes never touches the machine. The two SSH settings below are the exception
+— they need a hostname or sudo, so apply them by hand.
 
-| It | What |
-| --- | --- |
-| Installs | Neovim, the external tools the config needs, the plugins, the treesitter parsers |
-| Copies | the config into `~/.config/nvim`, backing up whatever was there |
-| Configures | git `merge.tool` / `diff.tool` = `nvimdiff`, `zdiff3` conflict style; `~/.profile` on Linux |
-| Stops | with instructions if there is no C compiler or no Homebrew, before changing anything |
+Idempotent. It reads the tool list from `lua/prereq`, the same one behind
+`:checkhealth prereq`, and installs only what is missing from `PATH`. Homebrew
+itself is the one thing it will not install for you.
 
-Set by hand: `~/.config/ghostty/config` →
-`shell-integration-features = cursor,no-sudo,title,ssh-env,ssh-terminfo,path`.
+## Configuration outside nvim
+
+| File | Machine | Setting | By |
+| --- | --- | --- | --- |
+| global git config | both | `merge.tool` `diff.tool` = `nvimdiff`, `mergetool.prompt=false`, `mergetool.keepBackup=false`, `merge.conflictstyle=zdiff3` | `setup.sh` |
+| `~/.profile` | Linux | `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"` — `~/.bashrc` returns early for non-interactive shells | `setup.sh` |
+| `~/.ssh/config` | client | `Host X` → `SetEnv COLORTERM=truecolor` — without it nvim's `DCS +q` probe prints as junk | by hand |
+| `/etc/ssh/sshd_config.d/99-colorterm.conf` | server | `AcceptEnv COLORTERM`, then `sudo sshd -t && sudo systemctl reload ssh` | by hand |
+| `~/.config/ghostty/config` | client | `shell-integration-features = cursor,no-sudo,title,ssh-env,ssh-terminfo,path` — or `infocmp -x xterm-ghostty \| ssh HOST -- tic -x -` | by hand |
 
 ## Keys
 
@@ -52,13 +58,10 @@ Leader is `Space`. Everything below also works from inside a terminal.
 | `<leader>B` / `<leader>o` | git blame this line / toggle inline diff overlay |
 | `<leader>1` `2` `3` `u` | mergetool: take LOCAL / BASE / REMOTE, refresh |
 
-| Panels | Behaviour |
-| --- | --- |
-| At startup | both open, cursor stays in the editor; skipped in `nvim -d` |
-| `<C-x>` | hides one |
-| First press on a closed panel | opens it and sends nothing; press again to send (`gv` reselects) |
-| Open-only key | none — the send keys are it |
-| Scrolling | `<Esc><Esc>` then `<C-b>` / `<C-u>` / `gg` |
+A closed panel absorbs the first press: `<leader>e` and `<leader>r` open it and
+send nothing; press again to send (`gv` reselects, since the split ends visual
+mode). There is no open-only key, and `<C-x>` hides. To scroll a panel,
+`<Esc><Esc>` then `<C-b>` / `<C-u>` / `gg`.
 
 ### Insert mode
 
@@ -66,7 +69,7 @@ Leader is `Space`. Everything below also works from inside a terminal.
 | --- | --- |
 | `<C-Space>` | ask for completion (`<C-x><C-o>` too) |
 | `<Tab>` / `<S-Tab>` | snippet placeholders, otherwise a plain Tab |
-| `<C-s>` | signature help |
+| `<C-s>` | signature help — nvim's own |
 
 ### Commands
 
@@ -74,9 +77,9 @@ Leader is `Space`. Everything below also works from inside a terminal.
 | --- | --- |
 | `:Venv` / `:Venv <path>` | browse for a Python environment; `<CR>` enters a folder or selects it. A path is activated if it is one, otherwise browsed from |
 | `:VenvShow` | report the active environment |
-| `:Serve [port]` | serve the working directory on loopback. Bare: from 3588 (or `vim.g.serve_port`) upward to a free one. Explicit: exactly that, or an error |
-| `:ServeStop` / `:Blame` | stop the server / blame this line |
-| `:checkhealth prereq` | report missing external tools and why each is wanted |
+| `:Serve [port]` | serve the working directory on loopback. Bare: from 8000 (or `vim.g.serve_port`) upward to a free one. Explicit: exactly that, or an error |
+| `:ServeStop` / `:Blame` / `:SessionRestore` | stop the server / blame this line / restore this directory's layout |
+| `:checkhealth prereq` | report which external tools are missing — `./setup.sh` installs them |
 
 ### Already in nvim or the plugins
 
@@ -92,6 +95,9 @@ Leader is `Space`. Everything below also works from inside a terminal.
 
 ### LSP and code navigation
 
+Go-to-definition is the built-in tag jump: on attach nvim sets
+`tagfunc=v:lua.vim.lsp.tagfunc`.
+
 | Key | Action |
 | --- | --- |
 | `<C-]>` / `g<C-]>` | definition / `:tjump` when several match |
@@ -100,8 +106,8 @@ Leader is `Space`. Everything below also works from inside a terminal.
 | `grr` `gri` `grt` / `grn` `gra` | references, implementation, type / rename, code action |
 | `gO` / `K` | document symbols / hover |
 
-**Trap:** `gd` and `gD` are *not* LSP here — they fall back to vim's textual
-search, so they often appear to work while only matching text.
+**Trap:** `gd` and `gD` are *not* LSP here. Unmapped, they fall back to vim's
+textual search, so they often appear to work while only matching text.
 
 ### Diff and merge
 
@@ -120,7 +126,7 @@ checks for leftover `<<<<<<<`.
 | `<leader>u` | recompute after an edit |
 | `:qa` / `:cq` | next changed file / abort the run |
 
-Only the right-hand buffer is real; edits to the left are discarded.
+Only the right-hand buffer is real; the left is a temp copy under `/tmp`.
 `--dir-diff` opens every changed file at once, `main...feature` diffs any ref.
 
 ## Layout
@@ -135,10 +141,11 @@ lua/treesitter.lua    highlighting
 lua/lsp.lua           diagnostics, completion, per-buffer setup
 lua/plugins.lua       vim.pack and the four plugins
 lua/diffs.lua         diff colours, mergetool keys, blame
+lua/session.lua       per-directory window/tab layout
 lua/serve.lua         the HTTP file server
 lua/venv.lua          Python environment switching
 lua/terminal.lua      terminal panels, shells, their keys
-lua/prereq/           which tools are needed, and which are missing
+lua/prereq/           external tool checks
 lsp/*.lua             one table per language server
 nvim-pack-lock.json   pinned plugin revisions
 ```
@@ -147,10 +154,11 @@ nvim-pack-lock.json   pinned plugin revisions
 
 | Thing | Behaviour |
 | --- | --- |
-| Clipboard | Yank reaches the system clipboard, over SSH too, with nothing installed. **Paste does not** — it reads nvim's own register. For text from another app use the terminal's paste, ⌘/Ctrl-V. |
-| Python env | `:Venv` switches the environment for the editor, the language server and the open shells, and is remembered per directory. A venv active in the launching shell wins. |
-| Files in a browser | `:Serve` *renders* the working directory rather than offering downloads: markdown and source, PDFs inline, media in a player with seeking. Over SSH: `ssh -L 3588:localhost:3588 HOST`. |
-| Reload | Buffers reload the instant a file changes on disk. Unsaved edits are kept, with a `W12` warning. |
-| Completion | Built-in LSP completion, offered after two word characters. `<CR>` stays a newline. |
-| Terminal scrollback | Claude Code and other full-screen TUIs run inline in a panel, so their history stays in the buffer and scrolls with the usual motions. |
+| Clipboard | Sitting at the machine, yank and put go straight to the real clipboard (`pbcopy`/`pbpaste`, `wl-copy`/`wl-paste`, `xclip`, `xsel` — first pair present, and only with a display), so no terminal has to honour an escape sequence. Over SSH, yank goes out as **OSC 52**, which needs nothing installed at either end. Paste never uses OSC 52 — a read waits on the terminal and hangs for 10s when it does not answer (Ghostty defaults to `clipboard-read = ask`) — so over SSH `p` uses nvim's own register, and ⌘/Ctrl-V pastes text from other apps. |
+| Sessions | Window/tab layout per directory, plus undo ('undofile') and shada. Terminals come back with shells restarted and the venv re-sourced. Bare `nvim` restores; `nvim foo.py` does not. Headless never saves or restores. |
+| Python env | `:Venv` sets `$VIRTUAL_ENV`/`$PATH`, restarts basedpyright, sources open shells (busy ones are skipped and reported), and is remembered per directory. A venv active in the launching shell wins. |
+| Files in a browser | `:Serve` runs `copyparty`, which *renders* rather than downloads: markdown and source through its viewer, PDFs inline, media in a player, Range requests so video seeks. Over SSH: `ssh -L 8000:localhost:8000 HOST`. |
+| Reload | Buffers reload the instant a file changes (2-11 ms), watching the file's *directory* — atomic writers replace the inode. Unsaved edits are kept, with a `W12` warning. |
+| Completion | nvim's built-in LSP completion. `autotrigger` only fires on the server's trigger characters, so a `TextChangedI` autocommand asks after two word characters. `noselect` keeps `<CR>` a newline. |
+| Terminal scrollback | A full-screen TUI on the alternate screen leaves nvim nothing to scroll. The env var in the table above keeps Claude Code on the primary screen; in Ghostty, ⌘+Fn+↑ and Shift+wheel scroll its own scrollback. |
 | Updating | `:lua vim.pack.update()`, review the diff, `:w`. Parsers: `:lua require("nvim-treesitter").install({"go"})`. |

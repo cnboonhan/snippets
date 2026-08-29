@@ -30,9 +30,17 @@ M.requirements = {
             or "xcode-select --install",
     },
 
-    -- No clipboard tool listed: the config always uses OSC 52, which needs
-    -- nothing installed on either end.
+    -- Copying needs nothing installed anywhere: it always goes out over OSC 52.
+    -- Pasting asks the local clipboard, and Linux has no equivalent of macOS's
+    -- built-in pbpaste. Only useful when sitting at the machine with a Wayland
+    -- session; over SSH nvim falls back to its own register either way.
 }
+
+if is_linux then
+    table.insert(M.requirements, {
+        bin = "wl-paste", pkg = "wl-clipboard", why = "pasting from the desktop clipboard (Wayland)",
+    })
+end
 
 function M.missing()
     return vim.tbl_filter(function(r)

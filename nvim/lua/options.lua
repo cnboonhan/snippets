@@ -36,27 +36,49 @@ o.swapfile = false       -- undofile covers recovery; swap files are noise
 o.splitright = true
 o.splitbelow = true
 
--- Always OSC 52 for copying: the clipboard behaves the same locally and over
--- SSH, on any client OS, with nothing installed anywhere. Requires a terminal
--- that implements it (Terminal.app does not). Must be set before 'clipboard',
--- which initializes the provider.
+-- Clipboard. Sitting at this machine, use the real one: pbcopy/pbpaste and
+-- their Linux equivalents talk to it directly, with no terminal in the middle
+-- to honour an escape sequence, answer a query, or drop a large payload.
 --
--- Pasting deliberately does not use OSC 52. Reading the clipboard means asking
--- the terminal for it and waiting: nvim blocks for a second, prints "Waiting
--- for OSC 52 response ... Ctrl-C to interrupt", then waits nine more. Ghostty
--- defaults to clipboard-read = ask, so every p sat behind a prompt, and a
--- terminal that ignores the query never answers at all. Answering from nvim's
--- own unnamed register is instant and cannot hang. Text copied in another
--- application still arrives via the terminal's own paste (Cmd/Ctrl-V), which
--- comes in as a bracketed paste and works in any mode.
+-- Over SSH there is no local clipboard to reach, so copying goes out as OSC 52
+-- -- the terminal at the far end puts it on the real clipboard, needing nothing
+-- installed anywhere. Pasting there deliberately does *not* use OSC 52: a read
+-- means asking the terminal and waiting, which blocks for a second, prints
+-- "Waiting for OSC 52 response ... Ctrl-C to interrupt", then waits nine more,
+-- and Ghostty defaults to clipboard-read = ask. nvim's own register answers
+-- instantly and cannot hang; Cmd/Ctrl-V still pastes text from other apps.
+--
+-- Must be set before 'clipboard', which initializes the provider.
+-- First match wins. env is the variable the tool needs to have something to
+-- talk to, so an X11 binary on a machine with no display is skipped.
+local TOOLS = {
+    { env = "", copy = { "pbcopy" }, paste = { "pbpaste" } },
+    { env = "WAYLAND_DISPLAY", copy = { "wl-copy" }, paste = { "wl-paste", "--no-newline" } },
+    { env = "DISPLAY", copy = { "xclip", "-i", "-selection", "clipboard" },
+      paste = { "xclip", "-o", "-selection", "clipboard" } },
+    { env = "DISPLAY", copy = { "xsel", "-i", "-b" }, paste = { "xsel", "-o", "-b" } },
+}
+
+local local_tool
+if not vim.env.SSH_CONNECTION then
+    for _, t in ipairs(TOOLS) do
+        if (t.env == "" or vim.env[t.env]) and vim.fn.executable(t.copy[1]) == 1 then
+            local_tool = t
+            break
+        end
+    end
+end
+
 local osc52 = require("vim.ui.clipboard.osc52")
-local function unnamed()
+local copy = local_tool and local_tool.copy or osc52.copy("+")
+local paste = local_tool and local_tool.paste or function()
     return vim.fn.getreg('"', 1, true)
 end
+
 vim.g.clipboard = {
-    name = "osc52-copy",
-    copy = { ["+"] = osc52.copy("+"), ["*"] = osc52.copy("*") },
-    paste = { ["+"] = unnamed, ["*"] = unnamed },
+    name = local_tool and local_tool.copy[1] or "osc52-copy",
+    copy = { ["+"] = copy, ["*"] = copy },
+    paste = { ["+"] = paste, ["*"] = paste },
 }
 o.clipboard = "unnamedplus"
 
