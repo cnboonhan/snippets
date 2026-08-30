@@ -511,6 +511,22 @@ function M.setup()
         end,
     })
 
+    -- Leaving a terminal window resumes following its output. nvim scrolls a
+    -- terminal window only while its cursor is on the last line, so scrolling
+    -- up to read pins it there -- right while you are looking at it, but it
+    -- means a panel you have since looked away from silently stops updating.
+    vim.api.nvim_create_autocmd("WinLeave", {
+        group = aug,
+        desc = "Follow output again when leaving a terminal window",
+        callback = function()
+            if vim.bo.buftype ~= "terminal" then
+                return
+            end
+            local win, buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+            pcall(vim.api.nvim_win_set_cursor, win, { vim.api.nvim_buf_line_count(buf), 0 })
+        end,
+    })
+
     vim.api.nvim_create_autocmd("TabClosed", {
         group = aug,
         desc = "Kill the terminals belonging to a closed tab",
