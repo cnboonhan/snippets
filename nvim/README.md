@@ -33,7 +33,7 @@ itself is the one thing it will not install for you.
 | --- | --- | --- | --- |
 | global git config | both | `merge.tool` `diff.tool` = `nvimdiff`, `mergetool.prompt=false`, `mergetool.keepBackup=false`, `merge.conflictstyle=zdiff3` | `setup.sh` |
 | `~/.profile` **and** `~/.bashrc` | Linux | brew on `PATH` for both kinds of ssh session: `~/.profile` for login shells, and `export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH` **above** the early return in `~/.bashrc` for `ssh host command`, which reads that file and nothing else | `setup.sh` |
-| `~/.ssh/config` | client | `Host *` → `SetEnv COLORTERM=truecolor` — the far end otherwise has only `TERM` to go on, and anything that rewrites it (a multiplexer, some transports) drops colour to 256 | `setup.sh` |
+| `~/.ssh/config` | client | `Host *` → `SetEnv COLORTERM=truecolor` — plain ssh manages without it, but tmux sets `TERM=tmux-256color`, whose terminfo claims 256 colours — so inside a pane this is the only thing telling nvim the terminal does truecolor | `setup.sh` |
 | `~/.tmux.conf` | wherever tmux runs | `set -g set-clipboard on` — tmux defaults to `external`, which drops an application's OSC 52, so a yank inside tmux never reaches the far terminal | `setup.sh` |
 | `/etc/ssh/sshd_config.d/99-colorterm.conf` | server | `AcceptEnv COLORTERM`, then `sudo sshd -t && sudo systemctl reload ssh` | by hand — `setup.sh` reports it, since it needs root |
 | `~/.config/ghostty/config` | client | `shell-integration-features = cursor,no-sudo,title,ssh-env,ssh-terminfo,path` — or `infocmp -x xterm-ghostty \| ssh HOST -- tic -x -` | by hand |

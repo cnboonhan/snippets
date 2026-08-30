@@ -278,11 +278,12 @@ EOF
 
 # ------------------------------------------------------------------ COLORTERM
 
-# Without it the far end has only TERM to go on. Over plain ssh that is usually
-# enough, since a terminal's own terminfo says truecolor -- but anything that
-# rewrites TERM on the way (a multiplexer, a transport with its own terminal
-# emulation) leaves terminfo saying 256, and colours silently degrade.
-# Declaring it on the connection survives that.
+# Without it the far end has only TERM to go on. Over plain ssh that is enough:
+# the terminal's own terminfo says truecolor and nvim believes it. Inside tmux
+# it is not -- tmux sets TERM=tmux-256color, whose terminfo claims 256 colours
+# and nothing more, so nvim turns 'termguicolors' off and every colour is
+# approximated. COLORTERM travels with the connection and outlives the rewrite,
+# which makes it the one signal that survives into a tmux pane.
 #
 # Host * rather than a named host: this needs no hostname, so it stays true for
 # machines added later. A server that does not accept the variable ignores it.
@@ -297,8 +298,8 @@ colorterm_send() {
     # anything above it.
     local tmp; tmp="$(mktemp)"
     {
-        printf '# Tell every host this terminal does truecolor, whatever TERM says\n'
-        printf '# by the time it gets there.\n'
+        printf '# Tell every host this terminal does truecolor. Inside tmux, TERM\n'
+        printf '# becomes tmux-256color and terminfo stops saying so; this survives.\n'
         printf 'Host *\n  SetEnv COLORTERM=truecolor\n\n'
         cat "$HOME/.ssh/config" 2>/dev/null
     } > "$tmp"
