@@ -322,6 +322,45 @@ colorterm_server_note() {
 EOF
 }
 
+# ----------------------------------------------------------------------- tmux
+
+# tmux defaults set-clipboard to "external", which reserves the system
+# clipboard for its own copy-mode and silently drops OSC 52 coming from a
+# program inside it -- so a yank in nvim never reaches the terminal at the far
+# end of the ssh connection, with no error anywhere. "on" lets it through.
+tmux_conf() {
+    if [ -f "$HOME/.tmux.conf" ]; then
+        echo "$HOME/.tmux.conf"
+    elif [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf" ]; then
+        echo "${XDG_CONFIG_HOME:-$HOME/.config}/tmux/tmux.conf"
+    else
+        echo "$HOME/.tmux.conf"
+    fi
+}
+
+tmux_clipboard_ok() {
+    command -v tmux >/dev/null 2>&1 || { info "tmux not installed - not needed"; return 0; }
+    grep -qE '^[[:space:]]*set(-option)?[[:space:]]+-g[[:space:]]+set-clipboard[[:space:]]+on' \
+        "$(tmux_conf)" 2>/dev/null
+}
+
+tmux_clipboard_set() {
+    local f; f="$(tmux_conf)"
+    mkdir -p "$(dirname "$f")"
+    cat >> "$f" <<'CONF'
+
+# Let programs inside tmux set the system clipboard with OSC 52 -- a yank in
+# nvim above all. The default, "external", keeps that for tmux's own copy-mode
+# and drops the application's sequence without a word.
+set -g set-clipboard on
+CONF
+    info "appended set-clipboard on to $f"
+    # A server already running keeps its old value until told otherwise.
+    if tmux set -g set-clipboard on 2>/dev/null; then
+        info "applied to the running tmux server too"
+    fi
+}
+
 # ------------------------------------------------------------------ main flow
 
 main() {
@@ -335,6 +374,7 @@ main() {
     require "Plugins"                           plugins_installed plugins_install
     require "Treesitter parsers"                parsers_installed parsers_install
     require "COLORTERM sent to remote hosts"    colorterm_sent    colorterm_send
+    require "tmux may set the clipboard"        tmux_clipboard_ok tmux_clipboard_set
     summary
 }
 

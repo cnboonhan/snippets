@@ -40,8 +40,8 @@ end
 -- guess at: source files and markdown through its own viewer, PDFs inline,
 -- images and video in a player, all with Range requests so seeking works. A
 -- plain static server can only send a MIME type, and the browser downloads
--- anything it has no viewer for -- .md, .lua, .yaml and, in miniserve's case,
--- every PDF.
+-- anything it has no viewer for: .md, .lua, .yaml, and often PDFs, which some
+-- servers additionally mark as an attachment.
 local function command_for(root, port)
     if vim.fn.executable("copyparty") == 1 then
         return {

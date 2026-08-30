@@ -52,8 +52,13 @@ end
 
 map({ "n", "t" }, "<C-x>", by_context(hide_window), { desc = "Hide current window" })
 
--- Get out of a :terminal buffer
+-- Get out of a :terminal buffer. <M-Esc> is the same gesture arriving as one
+-- packet: nvim reads ESC ESC in a single read as Alt-Esc rather than two key
+-- presses, which is what happens when a network link coalesces them -- so over
+-- ssh or mosh the double-tap would silently do nothing without this second
+-- mapping.
 map("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Terminal: normal mode" })
+map("t", "<M-Esc>", "<C-\\><C-n>", { desc = "Terminal: normal mode (coalesced Esc Esc)" })
 
 -- File explorer. mini.files navigates in columns and does file operations by
 -- editing the buffer text, then `=` to apply -- which is the part netrw made

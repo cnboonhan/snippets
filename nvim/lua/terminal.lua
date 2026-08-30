@@ -153,6 +153,14 @@ local function open(p, keep_focus)
     end
     p.win = vim.api.nvim_get_current_win()
 
+    -- Before :terminal, not after. The pty is sized from the window when the
+    -- job starts, and turning the number column off later frees the columns
+    -- without resizing it -- so the shell spent its life six columns narrower
+    -- than the window, and a full-screen program inside it wrapped early.
+    vim.wo[p.win].number = false
+    vim.wo[p.win].relativenumber = false
+    vim.wo[p.win].signcolumn = "no"
+
     local buf = p.bufs[p.cur]
     if buf and vim.api.nvim_buf_is_valid(buf) then
         vim.api.nvim_win_set_buf(p.win, buf)
@@ -170,9 +178,6 @@ local function open(p, keep_focus)
         end
     end
 
-    vim.wo[p.win].number = false
-    vim.wo[p.win].relativenumber = false
-    vim.wo[p.win].signcolumn = "no"
     set_winbar(p)
     follow(p)
 
@@ -432,9 +437,14 @@ function M.setup()
     -- frame currently drawn, so <Esc><Esc> then gg reaches the top of the
     -- visible frame and no further. Asking Claude Code to stay on the primary
     -- screen puts its history in this buffer instead, where the usual motions
-    -- work. Set on nvim's own environment, so every shell spawned below
-    -- inherits it while Claude Code launched from a real terminal keeps the
-    -- nicer full-screen UI.
+    -- work.
+    --
+    -- Set here rather than in a shell rc, deliberately: only the shells nvim
+    -- spawns inherit it, so Claude Code started from a real terminal keeps the
+    -- nicer full-screen UI. The cost, and it is the reason not to spread this
+    -- any further: on the primary screen everything already printed is history
+    -- at the width it was printed, so resizing the panel reflows only the
+    -- current frame and older lines keep their old wrapping.
     vim.env.CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN = "1"
 
     local map = vim.keymap.set
