@@ -94,16 +94,61 @@ brew_install() {
 
 # Homebrew on Linux lives outside the default PATH, so future shells need the
 # shellenv line. macOS installs into a path the system already searches.
-brew_on_path() {
-    [ "$(uname -s)" = "Linux" ] || { info "macOS - not needed"; return 0; }
-    grep -q 'brew shellenv' "$HOME/.profile" 2>/dev/null
+# Whether ~/.bashrc puts brew on PATH *before* it abandons non-interactive
+# shells. Presence is not enough: Ubuntu's stock file already mentions brew far
+# below that early return, where `ssh host command` never reaches -- which is
+# how this looked satisfied while mosh-server stayed missing. Compare line
+# numbers instead.
+bashrc_brew_is_early() {
+    local first guard
+    first=$(grep -n -m1 -F "$(dirname "$BREW")" "$HOME/.bashrc" 2>/dev/null | cut -d: -f1)
+    [ -n "$first" ] || return 1
+    guard=$(grep -n -m1 -E '^[[:space:]]*\*\)[[:space:]]*return' "$HOME/.bashrc" 2>/dev/null | cut -d: -f1)
+    [ -n "$guard" ] || return 0
+    [ "$first" -lt "$guard" ]
 }
 
+brew_on_path() {
+    [ "$(uname -s)" = "Linux" ] || { info "macOS - not needed"; return 0; }
+    grep -q 'brew shellenv' "$HOME/.profile" 2>/dev/null || return 1
+    bashrc_brew_is_early
+}
+
+# Two files, because bash reads a different one for each kind of shell and
+# neither sources the other:
+#
+#   login shell      (ssh host, then type)   -> ~/.profile
+#   non-interactive  (ssh host command)      -> ~/.bashrc
+#
+# The second is the one that bites. Ubuntu's ~/.bashrc abandons non-interactive
+# shells in its first few lines, so anything appended to it is never reached and
+# ~/.profile is not consulted at all -- `ssh host nvim` and, in particular,
+# mosh, which starts mosh-server over a non-interactive ssh command and reports
+# it as missing. Getting in above that early return is the whole point, so this
+# prepends rather than appends.
 brew_path_append() {
-    # ~/.bashrc returns early for non-interactive shells, so `ssh host nvim`
-    # never sees it; login shells read ~/.profile instead.
-    printf '\n# Homebrew\neval "$(%s shellenv)"\n' "$BREW" >> "$HOME/.profile"
-    info "appended shellenv to ~/.profile"
+    local bin tmp
+    bin="$(dirname "$BREW")"
+
+    if ! grep -q 'brew shellenv' "$HOME/.profile" 2>/dev/null; then
+        printf '\n# Homebrew\neval "$(%s shellenv)"\n' "$BREW" >> "$HOME/.profile"
+        info "appended shellenv to ~/.profile"
+    fi
+
+    if ! bashrc_brew_is_early; then
+        tmp="$(mktemp)"
+        {
+            printf '# Homebrew, above the non-interactive early return below:\n'
+            printf '# `ssh host command` reads this file and nothing else, and mosh\n'
+            printf '# starts mosh-server exactly that way.\n'
+            printf 'export PATH=%s:$PATH\n\n' "$bin"
+            cat "$HOME/.bashrc" 2>/dev/null
+        } > "$tmp"
+        # cat rather than mv, so the file keeps its own permissions.
+        cat "$tmp" > "$HOME/.bashrc"
+        rm -f "$tmp"
+        info "prepended PATH to ~/.bashrc"
+    fi
 }
 
 # ------------------------------------------------------------------- packages
@@ -235,7 +280,7 @@ EOF
 main() {
     require "C compiler for treesitter"         cc_works          cc_install
     require "Homebrew"                          brew_exists       brew_install
-    require "Homebrew on PATH for new shells"   brew_on_path      brew_path_append
+    require "Homebrew on PATH for ssh sessions"  brew_on_path      brew_path_append
     require "Neovim"                            nvim_exists       nvim_install
     require "External tools the config needs"   tools_exist       tools_install
     require "Config in $NVIM_DIR"               config_installed  config_install

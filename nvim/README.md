@@ -32,7 +32,7 @@ itself is the one thing it will not install for you.
 | File | Machine | Setting | By |
 | --- | --- | --- | --- |
 | global git config | both | `merge.tool` `diff.tool` = `nvimdiff`, `mergetool.prompt=false`, `mergetool.keepBackup=false`, `merge.conflictstyle=zdiff3` | `setup.sh` |
-| `~/.profile` | Linux | `eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"` — `~/.bashrc` returns early for non-interactive shells | `setup.sh` |
+| `~/.profile` **and** `~/.bashrc` | Linux | brew on `PATH` for both kinds of ssh session: `~/.profile` for login shells, and `export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH` **above** the early return in `~/.bashrc` for `ssh host command` — which is how `mosh` starts `mosh-server` | `setup.sh` |
 | `~/.ssh/config` | client | `Host X` → `SetEnv COLORTERM=truecolor` — without it nvim's `DCS +q` probe prints as junk | by hand |
 | `/etc/ssh/sshd_config.d/99-colorterm.conf` | server | `AcceptEnv COLORTERM`, then `sudo sshd -t && sudo systemctl reload ssh` | by hand |
 | `~/.config/ghostty/config` | client | `shell-integration-features = cursor,no-sudo,title,ssh-env,ssh-terminfo,path` — or `infocmp -x xterm-ghostty \| ssh HOST -- tic -x -` | by hand |
@@ -161,5 +161,5 @@ nvim-pack-lock.json   pinned plugin revisions
 | Reload | Buffers reload the instant a file changes (2-11 ms), watching the file's *directory* — atomic writers replace the inode. Unsaved edits are kept, with a `W12` warning. |
 | Completion | nvim's built-in LSP completion. `autotrigger` only fires on the server's trigger characters, so a `TextChangedI` autocommand asks after two word characters. `noselect` keeps `<CR>` a newline. |
 | Terminal scrollback | A full-screen TUI on the alternate screen leaves nvim nothing to scroll. The env var in the table above keeps Claude Code on the primary screen; in Ghostty, ⌘+Fn+↑ and Shift+wheel scroll its own scrollback. |
-| Working over SSH | `mosh HOST` instead of `ssh` — it echoes keystrokes locally and predicts the remote's response, so typing does not wait a round trip. Needs UDP 60000-61000 open to the server. It passes OSC 52 through, so remote yanks still reach the local clipboard; but it draws on the alternate screen, so the local terminal's scrollback does not hold the session. |
+| Working over SSH | `mosh HOST` instead of `ssh` — it echoes keystrokes locally and predicts the remote's response, so typing does not wait a round trip. Needs UDP 60000-61000 open to the server, and `mosh-server` on the `PATH` of a *non-interactive* ssh command, which is why `setup.sh` writes to `~/.bashrc` as well (see above); without it mosh reports the server missing even though an interactive login finds it. It passes OSC 52 through, so remote yanks still reach the local clipboard; but it draws on the alternate screen, so the local terminal's scrollback does not hold the session. |
 | Updating | `:lua vim.pack.update()`, review the diff, `:w`. Parsers: `:lua require("nvim-treesitter").install({"go"})`. |
