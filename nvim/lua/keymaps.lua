@@ -55,8 +55,7 @@ map({ "n", "t" }, "<C-x>", by_context(hide_window), { desc = "Hide current windo
 -- Get out of a :terminal buffer. <M-Esc> is the same gesture arriving as one
 -- packet: nvim reads ESC ESC in a single read as Alt-Esc rather than two key
 -- presses, which is what happens when a network link coalesces them -- so over
--- ssh or mosh the double-tap would silently do nothing without this second
--- mapping.
+-- ssh the double-tap would silently do nothing without this second mapping.
 map("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Terminal: normal mode" })
 map("t", "<M-Esc>", "<C-\\><C-n>", { desc = "Terminal: normal mode (coalesced Esc Esc)" })
 

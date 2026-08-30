@@ -30,12 +30,6 @@ M.requirements = {
             or "xcode-select --install",
     },
 
-    -- Not nvim's, but the editing experience over SSH: mosh keeps typing
-    -- responsive on a laggy link by echoing locally and predicting what the
-    -- remote will do, instead of waiting a round trip per keystroke. Needed at
-    -- both ends -- the formula installs the client and the server.
-    { bin = "mosh", pkg = "mosh", why = "local echo over SSH, so typing does not lag" },
-
     -- Copying needs nothing installed anywhere: it always goes out over OSC 52.
     -- Pasting asks the local clipboard, and Linux has no equivalent of macOS's
     -- built-in pbpaste. Only useful when sitting at the machine with a Wayland

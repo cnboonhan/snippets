@@ -97,7 +97,7 @@ brew_install() {
 # Whether ~/.bashrc puts brew on PATH *before* it abandons non-interactive
 # shells. Presence is not enough: Ubuntu's stock file already mentions brew far
 # below that early return, where `ssh host command` never reaches -- which is
-# how this looked satisfied while mosh-server stayed missing. Compare line
+# how this once looked satisfied while the binary stayed missing. Compare line
 # numbers instead.
 bashrc_brew_is_early() {
     local first guard
@@ -122,10 +122,10 @@ brew_on_path() {
 #
 # The second is the one that bites. Ubuntu's ~/.bashrc abandons non-interactive
 # shells in its first few lines, so anything appended to it is never reached and
-# ~/.profile is not consulted at all -- `ssh host nvim` and, in particular,
-# mosh, which starts mosh-server over a non-interactive ssh command and reports
-# it as missing. Getting in above that early return is the whole point, so this
-# prepends rather than appends.
+# ~/.profile is not consulted at all -- so `ssh host nvim`, and anything else
+# that runs a brew-installed binary as an ssh command, reports it missing.
+# Getting in above that early return is the whole point, so this prepends
+# rather than appends.
 brew_path_append() {
     local bin tmp
     bin="$(dirname "$BREW")"
@@ -139,8 +139,8 @@ brew_path_append() {
         tmp="$(mktemp)"
         {
             printf '# Homebrew, above the non-interactive early return below:\n'
-            printf '# `ssh host command` reads this file and nothing else, and mosh\n'
-            printf '# starts mosh-server exactly that way.\n'
+            printf '# `ssh host command` reads this file and nothing else, and\n'
+            printf '# abandons it a few lines below unless we get in first.\n'
             printf 'export PATH=%s:$PATH\n\n' "$bin"
             cat "$HOME/.bashrc" 2>/dev/null
         } > "$tmp"
@@ -279,10 +279,10 @@ EOF
 # ------------------------------------------------------------------ COLORTERM
 
 # Without it the far end has only TERM to go on. Over plain ssh that is usually
-# enough, since a terminal's own terminfo says truecolor -- but mosh replaces
-# TERM with its own xterm-256color whatever the client is, so terminfo then
-# says 256 and colours silently degrade. Declaring it on the connection fixes
-# both, and mosh inherits it because mosh shells out to ssh.
+# enough, since a terminal's own terminfo says truecolor -- but anything that
+# rewrites TERM on the way (a multiplexer, a transport with its own terminal
+# emulation) leaves terminfo saying 256, and colours silently degrade.
+# Declaring it on the connection survives that.
 #
 # Host * rather than a named host: this needs no hostname, so it stays true for
 # machines added later. A server that does not accept the variable ignores it.
@@ -297,8 +297,8 @@ colorterm_send() {
     # anything above it.
     local tmp; tmp="$(mktemp)"
     {
-        printf '# Tell every host this terminal does truecolor. Needed under mosh,\n'
-        printf '# which forces TERM=xterm-256color and would otherwise degrade colour.\n'
+        printf '# Tell every host this terminal does truecolor, whatever TERM says\n'
+        printf '# by the time it gets there.\n'
         printf 'Host *\n  SetEnv COLORTERM=truecolor\n\n'
         cat "$HOME/.ssh/config" 2>/dev/null
     } > "$tmp"
