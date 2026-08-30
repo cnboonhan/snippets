@@ -273,6 +273,53 @@ summary() {
    Use a terminal that implements OSC 52 (Ghostty, Kitty, WezTerm,
    iTerm2). macOS Terminal.app does not, and yanks there go nowhere.
 EOF
+    colorterm_server_note
+}
+
+# ------------------------------------------------------------------ COLORTERM
+
+# Without it the far end has only TERM to go on. Over plain ssh that is usually
+# enough, since a terminal's own terminfo says truecolor -- but mosh replaces
+# TERM with its own xterm-256color whatever the client is, so terminfo then
+# says 256 and colours silently degrade. Declaring it on the connection fixes
+# both, and mosh inherits it because mosh shells out to ssh.
+#
+# Host * rather than a named host: this needs no hostname, so it stays true for
+# machines added later. A server that does not accept the variable ignores it.
+colorterm_sent() {
+    ssh -G localhost 2>/dev/null | grep -qiE '^setenv .*COLORTERM=truecolor'
+}
+
+colorterm_send() {
+    mkdir -p "$HOME/.ssh"
+    # Prepended: ssh takes the first value it sees for a keyword, so a later
+    # Host block cannot override this, and a Host * at the bottom would lose to
+    # anything above it.
+    local tmp; tmp="$(mktemp)"
+    {
+        printf '# Tell every host this terminal does truecolor. Needed under mosh,\n'
+        printf '# which forces TERM=xterm-256color and would otherwise degrade colour.\n'
+        printf 'Host *\n  SetEnv COLORTERM=truecolor\n\n'
+        cat "$HOME/.ssh/config" 2>/dev/null
+    } > "$tmp"
+    cat "$tmp" > "$HOME/.ssh/config"
+    rm -f "$tmp"
+    chmod 600 "$HOME/.ssh/config"
+    info "prepended Host * SetEnv COLORTERM=truecolor to ~/.ssh/config"
+}
+
+# The other half lives on the machine being connected *to* and needs root, so
+# it is reported rather than done.
+colorterm_server_note() {
+    [ "$(uname -s)" = "Linux" ] || return 0
+    grep -rqs '^AcceptEnv.*COLORTERM' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ && return 0
+    cat <<'EOF'
+
+   This machine's sshd drops COLORTERM, so clients cannot declare truecolor.
+   To accept it:
+     echo 'AcceptEnv COLORTERM' | sudo tee /etc/ssh/sshd_config.d/99-colorterm.conf
+     sudo sshd -t && sudo systemctl reload ssh
+EOF
 }
 
 # ------------------------------------------------------------------ main flow
@@ -287,6 +334,7 @@ main() {
     require "git as merge/diff tool"            git_configured    git_configure
     require "Plugins"                           plugins_installed plugins_install
     require "Treesitter parsers"                parsers_installed parsers_install
+    require "COLORTERM sent to remote hosts"    colorterm_sent    colorterm_send
     summary
 }
 

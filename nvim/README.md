@@ -20,8 +20,8 @@ cd nvim && ./setup.sh          # install everything missing
 ```
 
 Takes no arguments: every concern is a check and a fix, and a check that
-passes never touches the machine. The two SSH settings below are the exception
-— they need a hostname or sudo, so apply them by hand.
+passes never touches the machine. The one exception is the server-side
+`AcceptEnv` below, which needs root — the script reports it instead.
 
 Idempotent. It reads the tool list from `lua/prereq`, the same one behind
 `:checkhealth prereq`, and installs only what is missing from `PATH`. Homebrew
@@ -33,8 +33,8 @@ itself is the one thing it will not install for you.
 | --- | --- | --- | --- |
 | global git config | both | `merge.tool` `diff.tool` = `nvimdiff`, `mergetool.prompt=false`, `mergetool.keepBackup=false`, `merge.conflictstyle=zdiff3` | `setup.sh` |
 | `~/.profile` **and** `~/.bashrc` | Linux | brew on `PATH` for both kinds of ssh session: `~/.profile` for login shells, and `export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH` **above** the early return in `~/.bashrc` for `ssh host command` — which is how `mosh` starts `mosh-server` | `setup.sh` |
-| `~/.ssh/config` | client | `Host X` → `SetEnv COLORTERM=truecolor` — without it nvim's `DCS +q` probe prints as junk | by hand |
-| `/etc/ssh/sshd_config.d/99-colorterm.conf` | server | `AcceptEnv COLORTERM`, then `sudo sshd -t && sudo systemctl reload ssh` | by hand |
+| `~/.ssh/config` | client | `Host *` → `SetEnv COLORTERM=truecolor` — the far end otherwise has only `TERM` to go on, and **mosh forces `TERM=xterm-256color`** whatever the client is, so colour degrades to 256 | `setup.sh` |
+| `/etc/ssh/sshd_config.d/99-colorterm.conf` | server | `AcceptEnv COLORTERM`, then `sudo sshd -t && sudo systemctl reload ssh` | by hand — `setup.sh` reports it, since it needs root |
 | `~/.config/ghostty/config` | client | `shell-integration-features = cursor,no-sudo,title,ssh-env,ssh-terminfo,path` — or `infocmp -x xterm-ghostty \| ssh HOST -- tic -x -` | by hand |
 
 ## Keys
