@@ -161,4 +161,5 @@ nvim-pack-lock.json   pinned plugin revisions
 | Reload | Buffers reload the instant a file changes (2-11 ms), watching the file's *directory* — atomic writers replace the inode. Unsaved edits are kept, with a `W12` warning. |
 | Completion | nvim's built-in LSP completion. `autotrigger` only fires on the server's trigger characters, so a `TextChangedI` autocommand asks after two word characters. `noselect` keeps `<CR>` a newline. |
 | Terminal scrollback | A full-screen TUI on the alternate screen leaves nvim nothing to scroll. The env var in the table above keeps Claude Code on the primary screen; in Ghostty, ⌘+Fn+↑ and Shift+wheel scroll its own scrollback. |
+| Working over SSH | `mosh HOST` instead of `ssh` — it echoes keystrokes locally and predicts the remote's response, so typing does not wait a round trip. Needs UDP 60000-61000 open to the server. It passes OSC 52 through, so remote yanks still reach the local clipboard; but it draws on the alternate screen, so the local terminal's scrollback does not hold the session. |
 | Updating | `:lua vim.pack.update()`, review the diff, `:w`. Parsers: `:lua require("nvim-treesitter").install({"go"})`. |
