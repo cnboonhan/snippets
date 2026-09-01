@@ -151,6 +151,52 @@ brew_path_append() {
     fi
 }
 
+# ------------------------------------------------------------------ ca bundle
+
+# Homebrew's curl is linked against Homebrew's OpenSSL, and that OpenSSL reads
+# exactly one bundle: $OPENSSLDIR/cert.pem. The ca-certificates formula writes
+# the bundle to etc/ca-certificates/cert.pem and openssl@3's post-install is
+# meant to symlink the two. When that link is missing, every https fetch by a
+# brew-installed tool fails with "unable to get local issuer certificate" while
+# /usr/bin/curl, which reads the distro's certs, works fine -- which is how the
+# treesitter parser download once died on a machine where everything else
+# looked healthy. Brew's curl comes first on PATH, so this hits brew itself too.
+brew_cert_file() {
+    local ssl
+    ssl="$("$BREW" --prefix openssl@3 2>/dev/null)"
+    [ -x "$ssl/bin/openssl" ] || return 1
+    "$ssl/bin/openssl" version -d 2>/dev/null |
+        sed -n 's/.*OPENSSLDIR: *"\(.*\)".*/\1\/cert.pem/p'
+}
+
+# -s follows the symlink, so a dangling one fails here too -- that is the whole
+# failure mode. A live https fetch would be the truer test, in the spirit of
+# cc_works, but it would make a satisfied machine need the network, which no
+# other check here does.
+ca_bundle_ok() {
+    local cert
+    cert="$(brew_cert_file)" || { info "no Homebrew OpenSSL - not needed"; return 0; }
+    [ -n "$cert" ] && [ -s "$cert" ]
+}
+
+# Link rather than copy, so a later `brew upgrade ca-certificates` is picked up.
+# The distro bundle is the fallback: reinstalling the formula would need the
+# https that is broken, so the fix cannot depend on it.
+ca_bundle_link() {
+    local cert src
+    cert="$(brew_cert_file)" || die "no Homebrew OpenSSL to point at a CA bundle"
+    for src in "$("$BREW" --prefix)/etc/ca-certificates/cert.pem" \
+               "$("$BREW" --prefix ca-certificates 2>/dev/null)/share/ca-certificates/cacert.pem" \
+               /etc/ssl/certs/ca-certificates.crt; do
+        [ -s "$src" ] && break
+        src=
+    done
+    [ -n "$src" ] || die "no CA bundle on this machine to link $cert to"
+    mkdir -p "$(dirname "$cert")"
+    ln -sfn "$src" "$cert"
+    info "linked $cert -> $src"
+}
+
 # ------------------------------------------------------------------- packages
 
 nvim_exists() { command -v nvim >/dev/null 2>&1; }
@@ -368,6 +414,7 @@ main() {
     require "C compiler for treesitter"         cc_works          cc_install
     require "Homebrew"                          brew_exists       brew_install
     require "Homebrew on PATH for ssh sessions"  brew_on_path      brew_path_append
+    require "CA bundle for Homebrew https"      ca_bundle_ok      ca_bundle_link
     require "Neovim"                            nvim_exists       nvim_install
     require "External tools the config needs"   tools_exist       tools_install
     require "Config in $NVIM_DIR"               config_installed  config_install
