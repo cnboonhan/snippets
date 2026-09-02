@@ -42,17 +42,19 @@ end
 -- plain static server can only send a MIME type, and the browser downloads
 -- anything it has no viewer for: .md, .lua, .yaml, and often PDFs, which some
 -- servers additionally mark as an attachment.
-local function command_for(root, port)
+local function command_for(root, port, writable)
     if vim.fn.executable("copyparty") == 1 then
         return {
             "copyparty", "-i", HOST, "-p", tostring(port),
-            "-v", root .. "::r", -- a single read-only volume at the root
+            -- One volume at the root: read-only by default, "rw" with :Serve!,
+            -- which turns the same page into a drop target for uploads.
+            "-v", root .. (writable and "::rw" or "::r"),
             -- Thumbnails and its index would otherwise land in a .hist folder
             -- inside whatever project is being served.
             "--hist", vim.fn.stdpath("cache") .. "/copyparty",
             "--no-crt", -- no TLS here: loopback only
             "-q",
-        }, "copyparty"
+        }, "copyparty" .. (writable and ", read-write" or "")
     end
     return {
         "python3", "-m", "http.server", tostring(port),
@@ -63,7 +65,7 @@ end
 -- With no argument, take vim.g.serve_port (or the default) and scan upward for
 -- a free one. With an explicit port, use exactly that and say so if it is
 -- taken, rather than quietly serving somewhere the caller did not ask for.
-function M.start(port)
+function M.start(port, writable)
     if proc then
         return vim.notify("already serving " .. url, vim.log.levels.INFO)
     end
@@ -80,7 +82,7 @@ function M.start(port)
     end
 
     local root = vim.fn.getcwd()
-    local cmd, which = command_for(root, port)
+    local cmd, which = command_for(root, port, writable)
     proc = vim.system(cmd, { text = true }, function(res)
         local was = url
         proc, url = nil, nil
@@ -115,9 +117,17 @@ end
 function M.setup()
     local aug = vim.api.nvim_create_augroup("user.serve", { clear = true })
 
+    -- Read-only unless asked: everything under the working directory is exposed
+    -- either way, and a writable server means anything that can reach the port
+    -- can also put files there. Loopback-bound, so that is you and anyone you
+    -- have given a tunnel to.
     vim.api.nvim_create_user_command("Serve", function(opts)
-        M.start(tonumber(opts.args))
-    end, { nargs = "?", desc = "Serve the working directory over HTTP [port]" })
+        M.start(tonumber(opts.args), opts.bang)
+    end, {
+        nargs = "?",
+        bang = true,
+        desc = "Serve the working directory over HTTP [port]; ! allows uploads",
+    })
     vim.api.nvim_create_user_command("ServeStop", M.stop, { desc = "Stop the file server" })
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
