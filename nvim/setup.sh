@@ -408,6 +408,37 @@ CONF
     fi
 }
 
+# The other half of truecolor, the half nvim cannot do: it emits RGB, and tmux
+# decides whether that reaches the real terminal or gets approximated into the
+# 256-colour cube on the way out. tmux passes it through only for an outer
+# terminal it believes can take it, which it judges from that terminal's
+# terminfo -- xterm-ghostty's, which is often not installed on the far machine
+# -- or from an autodetect probe that not every path answers. Naming the
+# capability removes the guess.
+tmux_rgb_ok() {
+    command -v tmux >/dev/null 2>&1 || { info "tmux not installed - not needed"; return 0; }
+    grep -qE '^[[:space:]]*set(-option)?[[:space:]]+-[as]+[[:space:]]+terminal-features.*RGB' \
+        "$(tmux_conf)" 2>/dev/null
+}
+
+tmux_rgb_set() {
+    local f; f="$(tmux_conf)"
+    mkdir -p "$(dirname "$f")"
+    cat >> "$f" <<'CONF'
+
+# Tell tmux the terminal it is running inside takes 24-bit colour, so it passes
+# nvim's RGB sequences out untouched instead of approximating them. Keyed on the
+# *outer* TERM, not tmux's own; -a appends, so the leading comma is the list
+# separator. For a terminal other than Ghostty, add an entry: ",xterm-kitty:RGB".
+set -as terminal-features ",xterm-ghostty:RGB"
+CONF
+    info "appended terminal-features xterm-ghostty:RGB to $f"
+    # A server already running keeps its old view of the terminal.
+    if tmux set -as terminal-features ",xterm-ghostty:RGB" 2>/dev/null; then
+        info "applied to the running tmux server too - reattach for it to take effect"
+    fi
+}
+
 # ------------------------------------------------------------------ main flow
 
 main() {
@@ -423,6 +454,7 @@ main() {
     require "Treesitter parsers"                parsers_installed parsers_install
     require "COLORTERM sent to remote hosts"    colorterm_sent    colorterm_send
     require "tmux may set the clipboard"        tmux_clipboard_ok tmux_clipboard_set
+    require "tmux passes 24-bit colour through"  tmux_rgb_ok       tmux_rgb_set
     summary
 }
 

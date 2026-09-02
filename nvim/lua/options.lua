@@ -1,7 +1,16 @@
 -- Editor options. Only non-defaults: nvim already gives us
--- filetype/indent/syntax, incsearch, hlsearch, wildmenu, mouse, termguicolors.
+-- filetype/indent/syntax, incsearch, hlsearch, wildmenu, mouse.
 
 local o = vim.o
+
+-- Truecolor. nvim sets this itself when it can tell the terminal does 24-bit
+-- colour, and inside tmux it cannot: TERM is tmux-256color, whose terminfo
+-- claims 256 colours and nothing more, which leaves COLORTERM as the only
+-- signal -- and over ssh that one only arrives if the server's sshd accepts
+-- it, which needs root. So assert it rather than wait to be told: every
+-- terminal this config is used from does truecolor, and tmux is told to pass
+-- the sequences through (setup.sh). Off, every highlight is approximated.
+o.termguicolors = true
 
 o.number = true
 o.relativenumber = true
