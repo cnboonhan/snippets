@@ -1,0 +1,17 @@
+# One extension id per line; blank lines and # comments ignored.
+# Installed by setup.sh with: code --install-extension <id>
+#
+# The remote extension pack pulls in remote-containers, remote-ssh,
+# remote-ssh-edit, remote-wsl, remote-explorer, remote-server,
+# remote-repositories, azure-repos and github.remotehub, so only the
+# pack is listed here.
+
+anthropic.claude-code
+vscodevim.vim
+
+ms-python.python
+ms-python.vscode-pylance
+ms-python.vscode-python-envs
+ms-python.debugpy
+
+ms-vscode-remote.vscode-remote-extensionpack
