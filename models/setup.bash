@@ -10,3 +10,5 @@ export TRITON_CACHE_DIR="$CACHE_PATH/triton_cache"
 export TORCHINDUCTOR_CACHE_DIR="$CACHE_PATH/triton_cache/inductor"
 export VLLM_CACHE_ROOT="$CACHE_PATH/triton_cache/vllm"
 export CUDA_CACHE_PATH="$CACHE_PATH/triton_cache/nv"
+
+set +x
