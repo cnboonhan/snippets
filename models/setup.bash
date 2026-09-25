@@ -1,3 +1,5 @@
+set -x 
+
 export CACHE_PATH="/tier2/persistent_data/boonhan"
 export UV_CACHE_DIR="$CACHE_PATH/uv_cache"
 export HF_HOME="$CACHE_PATH/hf_cache"
